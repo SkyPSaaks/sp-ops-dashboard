@@ -427,40 +427,62 @@ function getEff(t){
   return parseDue(t.d);
 }
 
-// SharePoint
-const SP=()=>`${CONFIG.siteUrl}/_api/web/lists/getbytitle('${encodeURIComponent(CONFIG.listName)}')/items`;
-async function spFetch(url,opts={}){
-  const r=await fetch(url,{...opts,headers:{'Authorization':'Bearer '+token,'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata',...(opts.headers||{})}});
-  if(!r.ok){const tx=await r.text();throw new Error('SP '+r.status+': '+tx);}
+// SharePoint via Microsoft Graph API
+let graphSiteId='', graphListId='';
+
+async function graphFetch(url,opts={}){
+  const r=await fetch(url,{...opts,headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json',...(opts.headers||{})}});
+  if(!r.ok){const tx=await r.text();throw new Error('Graph '+r.status+': '+tx);}
   if(r.status===204)return null;
   return r.json();
 }
+
+async function getGraphIds(){
+  if(graphSiteId&&graphListId)return true;
+  try{
+    // Extract hostname and site path from siteUrl
+    const url=new URL(CONFIG.siteUrl);
+    const hostname=url.hostname;
+    const sitePath=url.pathname;
+    const siteRes=await graphFetch(`https://graph.microsoft.com/v1.0/sites/${hostname}:${sitePath}`);
+    graphSiteId=siteRes.id;
+    const listsRes=await graphFetch(`https://graph.microsoft.com/v1.0/sites/${graphSiteId}/lists?$filter=displayName eq '${encodeURIComponent(CONFIG.listName)}'&$select=id,displayName`);
+    if(!listsRes.value||listsRes.value.length===0)throw new Error('List not found: '+CONFIG.listName);
+    graphListId=listsRes.value[0].id;
+    return true;
+  }catch(e){console.error('Failed to get Graph IDs',e);return false;}
+}
+
 async function spLoad(){
   setSI('saving');
   try{
-    const d=await spFetch(SP()+'?$select=Id,Title,StateValue&$top=5000');
+    const ok=await getGraphIds(); if(!ok)throw new Error('Could not resolve site/list IDs');
+    const d=await graphFetch(`https://graph.microsoft.com/v1.0/sites/${graphSiteId}/lists/${graphListId}/items?expand=fields(select=Title,StateValue)&$top=5000`);
     states={};overrides={};hist=[];spIds={};
     (d.value||[]).forEach(item=>{
-      spIds[item.Title]=item.Id;
+      const f=item.fields||{};
+      spIds[f.Title]=item.id;
       try{
-        const v=JSON.parse(item.StateValue||'{}');
-        if(item.Title==='__history__'){hist=v||[];return;}
-        if(v.status)states[item.Title]=v.status;
-        if(v.override)overrides[item.Title]=v.override;
-        if(v.responsible)responsible[item.Title]=v.responsible;
-        if(v.support)support[item.Title]=v.support;
+        const v=JSON.parse(f.StateValue||'{}');
+        if(f.Title==='__history__'){hist=v||[];return;}
+        if(v.status)states[f.Title]=v.status;
+        if(v.override)overrides[f.Title]=v.override;
+        if(v.responsible)responsible[f.Title]=v.responsible;
+        if(v.support)support[f.Title]=v.support;
       }catch(e){}
     });
     setSI('');
   }catch(e){setSI('err');console.error(e);}
 }
+
 async function spSave(key,val){
-  const body=JSON.stringify({Title:key,StateValue:JSON.stringify(val)});
+  const ok=await getGraphIds(); if(!ok)throw new Error('Could not resolve IDs');
+  const body=JSON.stringify({fields:{Title:key,StateValue:JSON.stringify(val)}});
   if(spIds[key]){
-    await spFetch(SP()+'('+spIds[key]+')',{method:'POST',body,headers:{'X-HTTP-Method':'MERGE','IF-MATCH':'*'}});
+    await graphFetch(`https://graph.microsoft.com/v1.0/sites/${graphSiteId}/lists/${graphListId}/items/${spIds[key]}`,{method:'PATCH',body});
   }else{
-    const r=await spFetch(SP(),{method:'POST',body});
-    if(r)spIds[key]=r.Id;
+    const r=await graphFetch(`https://graph.microsoft.com/v1.0/sites/${graphSiteId}/lists/${graphListId}/items`,{method:'POST',body});
+    if(r)spIds[key]=r.id;
   }
 }
 function qSave(key,val){

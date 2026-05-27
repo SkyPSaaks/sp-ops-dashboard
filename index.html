@@ -223,26 +223,40 @@ function parseDue(txt){
 function nextCycle(dueTxt,freq){
   const base=parseDue(dueTxt);if(!base)return null;
   const y=TODAY.getFullYear();
+
   if(freq==='Monthly'){
-    // Always return next month from today
+    // Next month, same day-of-month as original deadline
     return new Date(TODAY.getFullYear(),TODAY.getMonth()+1,base.getDate());
   }
+
   if(freq==='Quarterly'){
-    const ref=new Date(y,2,31),off=base-ref;
-    // Try current and next year quarters, pick first strictly after TODAY
-    for(let yr=y;yr<=y+1;yr++){
-      for(let q of qEnds(yr)){const c=new Date(q.getTime()+off);if(c>TODAY)return c;}
+    // Calculate offset from nearest quarter-end to base date
+    // Find the quarter-end that base was relative to
+    const allQ=[new Date(y-1,11,31),new Date(y,2,31),new Date(y,5,30),new Date(y,8,30),new Date(y,11,31),new Date(y+1,2,31)];
+    // Find offset: how many days after a quarter-end is the deadline?
+    let off=0;
+    for(let i=0;i<allQ.length-1;i++){
+      if(base>allQ[i]&&base<=new Date(allQ[i].getTime()+120*864e5)){
+        off=Math.round((base-allQ[i])/864e5);
+        break;
+      }
+    }
+    // Now find next quarter-end after TODAY and add offset
+    const futureQ=[new Date(y,2,31),new Date(y,5,30),new Date(y,8,30),new Date(y,11,31),new Date(y+1,2,31)];
+    for(let q of futureQ){
+      const c=new Date(q.getTime()+off*864e5);
+      if(c>TODAY)return c;
     }
     return null;
   }
+
   if(freq==='Semestral'){
-    // Pick next semester end strictly after TODAY
     const candidates=[new Date(y,7,31),new Date(y+1,1,28),new Date(y+1,7,31)];
     for(let c of candidates)if(c>TODAY)return c;
     return null;
   }
+
   if(freq==='Annual'){
-    // Walk forward year by year until we find a future date
     let d=new Date(base);
     while(d<=TODAY)d=new Date(d.getFullYear()+1,d.getMonth(),d.getDate());
     return d;
@@ -529,7 +543,13 @@ window.markDone=function(id){
     qSave('__history__',hist);
     if(RECURRING.includes(t.f)){
       delete overrides[id];
-      setTimeout(()=>{states[id]='Not Started';qSave(id,{status:'Not Started',override:null});renderCur();},1200);
+      // Small delay so user sees "Done" flash, then reset
+      setTimeout(()=>{
+        states[id]='Not Started';
+        delete overrides[id]; // ensure cleared
+        qSave(id,{status:'Not Started',override:null,responsible:responsible[id]||null,support:support[id]||null});
+        renderCur();
+      },1200);
     }
   }else if(cur==='Completed'){states[id]='Not Started';}
   qSave(id,{status:states[id],override:overrides[id]||null,responsible:responsible[id]||null,support:support[id]||null});

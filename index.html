@@ -223,14 +223,30 @@ function parseDue(txt){
 function nextCycle(dueTxt,freq){
   const base=parseDue(dueTxt);if(!base)return null;
   const y=TODAY.getFullYear();
-  if(freq==='Monthly')return new Date(y,TODAY.getMonth()+1,base.getDate());
+  if(freq==='Monthly'){
+    // Always return next month from today
+    return new Date(TODAY.getFullYear(),TODAY.getMonth()+1,base.getDate());
+  }
   if(freq==='Quarterly'){
     const ref=new Date(y,2,31),off=base-ref;
-    for(let q of qEnds()){const c=new Date(q.getTime()+off);if(c>TODAY)return c;}
+    // Try current and next year quarters, pick first strictly after TODAY
+    for(let yr=y;yr<=y+1;yr++){
+      for(let q of qEnds(yr)){const c=new Date(q.getTime()+off);if(c>TODAY)return c;}
+    }
     return null;
   }
-  if(freq==='Semestral'){const s=new Date(y,7,31);return s>TODAY?s:new Date(y+1,1,28);}
-  if(freq==='Annual'){if(base>TODAY)return base;return new Date(base.getFullYear()+1,base.getMonth(),base.getDate());}
+  if(freq==='Semestral'){
+    // Pick next semester end strictly after TODAY
+    const candidates=[new Date(y,7,31),new Date(y+1,1,28),new Date(y+1,7,31)];
+    for(let c of candidates)if(c>TODAY)return c;
+    return null;
+  }
+  if(freq==='Annual'){
+    // Walk forward year by year until we find a future date
+    let d=new Date(base);
+    while(d<=TODAY)d=new Date(d.getFullYear()+1,d.getMonth(),d.getDate());
+    return d;
+  }
   return base;
 }
 function fmtD(d){if(!d)return'–';return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});}

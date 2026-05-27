@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sky Pointer – Operational Dashboard</title>
+<script src="https://unpkg.com/@azure/msal-browser@3.10.0/lib/msal-browser.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f8f7f4;--surface:#ffffff;--surface2:#f1efe9;--border:#e5e2d9;
+  --text:#1a1a18;--text2:#6b6860;--text3:#9b9890;
+  --accent:#1a3a5c;--accent2:#2d6a9f;
+  --success:#2d6a4f;--warn:#92400e;--danger:#7f1d1d;
+  --success-bg:#d1fae5;--warn-bg:#fef3c7;--danger-bg:#fee2e2;
+  --r:8px;--rl:12px;--font:'Trebuchet MS','Segoe UI',sans-serif;
+}
+body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh}
+#config-banner{display:none;background:#1a1a2e;color:#e2e8f0;padding:1.5rem 2rem;font-size:13px;font-family:monospace;border-bottom:2px solid #f59e0b}
+#config-banner h2{color:#f59e0b;margin:0 0 .5rem;font-size:15px}
+#config-banner p{margin:.3rem 0;color:#94a3b8}
+#config-banner code{background:#0f0f23;padding:2px 6px;border-radius:3px;color:#7dd3fc}
+#auth-screen{display:flex;align-items:center;justify-content:center;min-height:100vh}
+.auth-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:3rem;max-width:460px;width:100%;text-align:center}
+.auth-logo{font-size:26px;font-weight:700;color:var(--accent);margin-bottom:.4rem;letter-spacing:-.5px}
+.auth-sub{font-size:13px;color:var(--text2);margin-bottom:2rem}
+.auth-btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;background:var(--accent);color:#fff;border:none;padding:12px 28px;border-radius:var(--r);font-size:14px;font-weight:500;cursor:pointer;width:100%;transition:background .15s;font-family:var(--font)}
+.auth-btn:hover{background:var(--accent2)}
+.auth-btn:disabled{opacity:.4;cursor:not-allowed}
+.auth-err{margin-top:1rem;font-size:12px;color:#dc2626;background:#fee2e2;padding:8px 12px;border-radius:var(--r);display:none;text-align:left}
+#app{display:none}
+.topbar{background:var(--accent);color:#fff;padding:0 2rem;display:flex;align-items:center;justify-content:space-between;height:52px;position:sticky;top:0;z-index:100}
+.topbar-title{font-size:16px;font-weight:700;letter-spacing:-.3px}
+.topbar-right{display:flex;align-items:center;gap:12px;font-size:12px;color:rgba(255,255,255,.75)}
+.user-avatar{width:26px;height:26px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600}
+.signout-btn{background:rgba(255,255,255,.15);border:none;color:#fff;padding:4px 10px;border-radius:4px;font-size:11px;cursor:pointer;font-family:var(--font)}
+.signout-btn:hover{background:rgba(255,255,255,.25)}
+.save-ind{font-size:11px;padding:2px 8px;border-radius:4px}
+.si-saving{background:rgba(255,255,255,.2);color:#fff}
+.si-saved{background:#d1fae5;color:#064e3b}
+.si-err{background:#fee2e2;color:#7f1d1d}
+.nav{background:var(--surface);border-bottom:1px solid var(--border);padding:0 2rem;display:flex}
+.nav-btn{padding:12px 16px;font-size:13px;cursor:pointer;border:none;background:none;color:var(--text2);border-bottom:2px solid transparent;margin-bottom:-1px;font-family:var(--font);transition:color .15s}
+.nav-btn.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+.nav-btn:hover:not(.active){color:var(--text)}
+.main{max-width:1200px;margin:0 auto;padding:2rem}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:2rem}
+.metric{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:1rem 1.25rem}
+.mlabel{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.mval{font-size:26px;font-weight:700;line-height:1}
+.mv-d{color:#dc2626}.mv-w{color:#d97706}.mv-i{color:var(--accent2)}.mv-s{color:#059669}
+.egrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(195px,1fr));gap:12px}
+.ecard{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:14px;cursor:pointer;transition:border-color .15s}
+.ecard:hover{border-color:var(--accent2)}
+.ecard.sel{border:2px solid var(--accent)}
+.ecard-name{font-size:13px;font-weight:600;margin-bottom:8px;line-height:1.4}
+.pbar{height:4px;background:var(--surface2);border-radius:2px;overflow:hidden;margin-bottom:5px}
+.pfill{height:100%;border-radius:2px;transition:width .4s}
+.estats{font-size:11px;color:var(--text3)}
+.frow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:1.2rem}
+.frow label{font-size:12px;color:var(--text2);font-weight:500}
+.frow select{font-size:12px;padding:5px 10px;border-radius:var(--r);border:1px solid var(--border);background:var(--surface);color:var(--text);font-family:var(--font)}
+.ebar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:1.2rem}
+.ebtn{padding:5px 12px;border:1px solid var(--border);border-radius:20px;font-size:12px;background:var(--surface);color:var(--text2);cursor:pointer;font-family:var(--font)}
+.ebtn.active{background:var(--accent);color:#fff;border-color:transparent}
+.ebtn:hover:not(.active){border-color:var(--accent2)}
+.sec{margin-bottom:1.75rem}
+.sec-title{font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+.cw{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden}
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{text-align:left;padding:9px 12px;font-size:11px;font-weight:600;color:var(--text3);border-bottom:1px solid var(--border);background:var(--surface2);text-transform:uppercase;letter-spacing:.04em}
+.tbl td{padding:8px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tr:hover td{background:#fafaf8}
+.tnm{max-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
+.b-Critical{background:#fee2e2;color:#7f1d1d}
+.b-High{background:#fef3c7;color:#78350f}
+.b-Medium{background:#d1fae5;color:#064e3b}
+.b-Low{background:#f1f0ea;color:#4a4840}
+.fb{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;background:var(--surface2);color:var(--text2)}
+.sbtn{border:none;cursor:pointer;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:500;white-space:nowrap;font-family:var(--font);display:inline-flex;align-items:center;gap:4px}
+.s-ns{background:var(--surface2);color:var(--text2)}.s-ns:hover{background:#e5e2d9}
+.s-ip{background:#dbeafe;color:#1e3a5f}.s-ip:hover{background:#bfdbfe}
+.s-dn{background:#d1fae5;color:#064e3b}.s-dn:hover{background:#a7f3d0}
+.d-ov{color:#dc2626;font-weight:600}
+.d-sn{color:#d97706;font-weight:500}
+.d-ok{color:var(--text2)}
+.due-cl{cursor:pointer;border-bottom:1px dashed var(--border)}
+.due-cl:hover{border-bottom-color:var(--accent2);color:var(--accent)}
+.due-inp{font-size:12px;padding:3px 7px;border-radius:4px;border:1px solid var(--accent2);background:var(--surface);color:var(--text);width:118px;font-family:var(--font)}
+.ovr{font-size:10px;background:var(--warn-bg);color:var(--warn);border-radius:10px;padding:1px 6px;margin-left:4px;font-weight:600}
+.nxt{font-size:10px;color:var(--text3);margin-right:2px}
+.hrow{display:flex;align-items:flex-start;gap:12px;padding:11px 14px;border-bottom:1px solid var(--border)}
+.hrow:last-child{border-bottom:none}
+.hdot{width:8px;height:8px;border-radius:50%;background:#059669;flex-shrink:0;margin-top:5px}
+.hbody{flex:1;min-width:0}
+.htask{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hmeta{font-size:11px;color:var(--text2);margin-top:2px}
+.hcycle{font-weight:600;color:var(--text)}
+.hts{font-size:11px;color:var(--text3);text-align:right;white-space:nowrap;flex-shrink:0}
+.empty{padding:2.5rem;text-align:center;color:var(--text2);font-size:14px;border:1px dashed var(--border);border-radius:var(--rl)}
+.loading{padding:3rem;text-align:center;color:var(--text2);font-size:14px}
+.sg{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:2rem;max-width:620px;margin:1.5rem auto;text-align:left}
+.sg h2{font-size:18px;font-weight:700;color:var(--accent);margin-bottom:1.25rem}
+.sg-step{display:flex;gap:14px;margin-bottom:1.25rem;align-items:flex-start}
+.sg-n{width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+.sg-b .sg-title{font-size:14px;font-weight:600;margin-bottom:4px}
+.sg-b .sg-desc{font-size:13px;color:var(--text2);line-height:1.6}
+.sg-b .sg-desc code{background:var(--surface2);padding:1px 5px;border-radius:3px;font-family:monospace;font-size:12px;color:var(--accent)}
+</style>
+</head>
+<body>
+
+<div id="config-banner">
+  <h2>⚙ First-time setup required</h2>
+  <p>Open this HTML file in a text editor. Find the <code>CONFIG</code> block near the top of the script and fill in your Azure AD and SharePoint details.</p>
+  <p>See the setup guide below for step-by-step instructions.</p>
+</div>
+
+<div id="auth-screen">
+  <div class="auth-card">
+    <div class="auth-logo">Sky Pointer</div>
+    <div class="auth-sub">Operational compliance dashboard</div>
+    <button class="auth-btn" id="sign-in-btn">
+      <svg width="18" height="18" viewBox="0 0 21 21" fill="currentColor"><path d="M10.5 0C4.7 0 0 4.7 0 10.5S4.7 21 10.5 21 21 16.3 21 10.5 16.3 0 10.5 0zm0 4a2.5 2.5 0 110 5 2.5 2.5 0 010-5zm0 13.2c-3.1 0-5.8-1.6-7.4-4 .04-2.5 5-3.8 7.4-3.8s7.36 1.3 7.4 3.8c-1.6 2.4-4.3 4-7.4 4z"/></svg>
+      Sign in with Microsoft
+    </button>
+    <div class="auth-err" id="auth-err"></div>
+    <div id="setup-guide-inline"></div>
+  </div>
+</div>
+
+<div id="app">
+  <div class="topbar">
+    <div class="topbar-title">Sky Pointer – Operational Dashboard</div>
+    <div class="topbar-right">
+      <span id="save-ind" class="save-ind"></span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <div class="user-avatar" id="u-avatar">–</div>
+        <span id="u-name"></span>
+      </div>
+      <button class="signout-btn" onclick="doSignOut()">Sign out</button>
+    </div>
+  </div>
+  <div class="nav">
+    <button class="nav-btn active" onclick="goTab('overview')">Overview</button>
+    <button class="nav-btn" onclick="goTab('entity')">By entity</button>
+    <button class="nav-btn" onclick="goTab('upcoming')">Upcoming</button>
+    <button class="nav-btn" onclick="goTab('history')">History</button>
+  </div>
+  <div class="main">
+    <div id="t-overview"></div>
+    <div id="t-entity" style="display:none"></div>
+    <div id="t-upcoming" style="display:none"></div>
+    <div id="t-history" style="display:none"></div>
+  </div>
+</div>
+
+<script>
+// ================================================================
+//  CONFIG — fill these in before uploading
+// ================================================================
+const CONFIG = {
+  clientId : 'YOUR_CLIENT_ID_HERE',
+  tenantId : 'YOUR_TENANT_ID_HERE',
+  siteUrl  : 'https://YOUR_ORG.sharepoint.com/sites/YOUR_SUBSITE',
+  listName : 'SP Ops Dashboard',
+};
+// ================================================================
+
+const CONFIGURED = !CONFIG.clientId.includes('YOUR_');
+const RECURRING = ['Monthly','Quarterly','Semestral','Annual'];
+
+const ESHORT = {
+  'Sky Pointer Fund I (US RIA)':'Fund I',
+  'Sky Pointer Fund 2 LP (US RIA)':'Fund 2 LP',
+  'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)':'Fund 2 SC-R',
+  'SPV Scale':'SPV Scale','SPV DW':'SPV DW','SPV MIDI':'SPV MIDI','SPV Valon':'SPV Valon'
+};
+const ENTITIES = Object.keys(ESHORT);
+
+// Date helpers
+const TODAY = (()=>{const d=new Date();d.setHours(0,0,0,0);return d;})();
+function qEnds(y=TODAY.getFullYear()){return[new Date(y,2,31),new Date(y,5,30),new Date(y,8,30),new Date(y,11,31)];}
+function nearestQPlus(n){for(let q of qEnds()){const d=new Date(q);d.setDate(d.getDate()+n);if(d>=TODAY)return d;}return null;}
+function nearestQEnd(){for(let q of qEnds())if(q>=TODAY)return q;return new Date(TODAY.getFullYear()+1,2,31);}
+
+function parseDue(txt){
+  if(!txt)return null;
+  const t=txt.toLowerCase(),y=TODAY.getFullYear();
+  if(t.includes('jan 31')||t.includes('enero'))return new Date(y,0,31);
+  if(t.includes('mar 31')||t.includes('marzo'))return new Date(y,2,31);
+  if(t.includes('apr 30')||t.includes('april 30'))return new Date(y,3,30);
+  if(t.includes('jun 30')||t.includes('june 30')||t.includes('junio'))return new Date(y,5,30);
+  if(t.includes('jun 1')||t.includes('june 1'))return new Date(y,5,1);
+  if(t.includes('jul 15'))return new Date(y,6,15);
+  if(t.includes('jul 31'))return new Date(y,6,31);
+  if(t.includes('aug 31')||t.includes('agosto'))return new Date(y,7,31);
+  if(t.includes('sep 15'))return new Date(y,8,15);
+  if(t.includes('dec 31')||t.includes('diciembre'))return new Date(y,11,31);
+  if(t.includes('feb 28'))return new Date(y,1,28);
+  if(t.includes('20 abr'))return new Date(y,3,20);
+  if(t.includes('20 jul'))return new Date(y,6,20);
+  if(t.includes('20 oct'))return new Date(y,9,20);
+  if(t.includes('20 ene'))return new Date(y+1,0,20);
+  if(t.includes('mid-feb'))return new Date(y,1,15);
+  if(t.includes('mid-may'))return new Date(y,4,15);
+  if(t.includes('mid-aug'))return new Date(y,7,15);
+  if(t.includes('mid-nov'))return new Date(y,10,15);
+  if(t.includes('5th business')||t.includes('5 business'))return new Date(y,TODAY.getMonth()+1,7);
+  if(t.includes('15 days of quarter')||t.includes('15 days after quarter'))return nearestQPlus(15);
+  if(t.includes('45 days after quarter'))return nearestQPlus(45);
+  if(t.includes('60 days after quarter'))return nearestQPlus(60);
+  if(t.includes('65 days after quarter'))return nearestQPlus(65);
+  if(t.includes('70 days after quarter'))return nearestQPlus(70);
+  if(t.includes('80 days after quarter'))return nearestQPlus(80);
+  if(t.includes('90 days after quarter'))return nearestQPlus(90);
+  if(t.includes('last business day')||t.includes('último día hábil'))return nearestQEnd();
+  if(t.includes('q2')||t.includes('april–june'))return new Date(y,4,30);
+  if(t.includes('q4')||t.includes('october–november'))return new Date(y,9,31);
+  return null;
+}
+function nextCycle(dueTxt,freq){
+  const base=parseDue(dueTxt);if(!base)return null;
+  const y=TODAY.getFullYear();
+  if(freq==='Monthly')return new Date(y,TODAY.getMonth()+1,base.getDate());
+  if(freq==='Quarterly'){
+    const ref=new Date(y,2,31),off=base-ref;
+    for(let q of qEnds()){const c=new Date(q.getTime()+off);if(c>TODAY)return c;}
+    return null;
+  }
+  if(freq==='Semestral'){const s=new Date(y,7,31);return s>TODAY?s:new Date(y+1,1,28);}
+  if(freq==='Annual'){if(base>TODAY)return base;return new Date(base.getFullYear()+1,base.getMonth(),base.getDate());}
+  return base;
+}
+function fmtD(d){if(!d)return'–';return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});}
+function fmtDs(d){if(!d)return'–';return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'});}
+function fmtCycle(d,f){
+  if(!d)return'';
+  const ms=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  if(f==='Monthly')return ms[d.getMonth()]+' '+d.getFullYear();
+  if(f==='Quarterly')return'Q'+(Math.floor(d.getMonth()/3)+1)+' '+d.getFullYear();
+  if(f==='Semestral')return(d.getMonth()<6?'H1':'H2')+' '+d.getFullYear();
+  return''+d.getFullYear();
+}
+function du(d){if(!d)return null;return Math.round((d-TODAY)/864e5);}
+function dcls(d){const n=du(d);if(n===null)return'';if(n<0)return'd-ov';if(n<=30)return'd-sn';return'd-ok';}
+function dlbl(d){const n=du(d);if(n===null)return'–';if(n<0)return Math.abs(n)+'d overdue';if(n===0)return'today';if(n<=7)return n+'d';return fmtDs(d);}
+
+// Task data
+const BASE=[
+  {e:'Sky Pointer Fund I (US RIA)',c:'Regulatory',t:'EDGAR Account Setup – CIK, CCC & PMAC credentials',f:'One Time',d:'At inception',p:'Low',s:'Completed'},
+  {e:'Sky Pointer Fund I (US RIA)',c:'Regulatory',t:'IARD Account Setup',f:'One Time',d:'At inception',p:'Low',s:'Completed'},
+  {e:'Sky Pointer Fund I (US RIA)',c:'Regulatory',t:'Blue Sky / state notice filings – initial',f:'One Time',d:'Within 15 calendar days',p:'High',s:'Completed'},
+  {e:'Sky Pointer Fund I (US RIA)',c:'Regulatory',t:'Compliance program – policies, Code of Ethics, CCO',f:'One Time',d:'Before RIA registration',p:'High',s:'Completed'},
+  {e:'Sky Pointer Fund I (US RIA)',c:'Regulatory',t:'Form ADV annual update – parts 1A, 1B, 2A & 2B',f:'Annual',d:'By Mar 31 (within 90 days of Dec 31 fiscal year-end)',p:'Critical',s:'Completed'},
+  {e:'Sky Pointer Fund I (US RIA)',c:'Regulatory',t:'Form D annual amendment – ongoing offerings >12 months',f:'Annual',d:'By Mar 31 (within 90 days of Dec 31 fiscal year-end)',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund I (US RIA)',c:'Regulatory',t:'Blue Sky annual renewals (e.g. California)',f:'Annual',d:'By Dec 31',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund I (US RIA)',c:'Regulatory',t:'Annual compliance review – Rule 206(4)-7',f:'Annual',d:'By Mar 31 (within 12 months of prior review)',p:'High',s:'Completed'},
+  {e:'Sky Pointer Fund I (US RIA)',c:'Operations',t:'Update cash summary on master file (Northern Trust)',f:'Monthly',d:'By the 5th business day of the following month',p:'Medium',s:'Not Started'},
+  {e:'Sky Pointer Fund I (US RIA)',c:'Operations',t:'Update accounting folder with invoice register',f:'Monthly',d:'By the 5th business day of the following month',p:'Medium',s:'Not Started'},
+  {e:'Sky Pointer Fund I (US RIA)',c:'Operations',t:'Collect quarterly reports from invested funds',f:'Quarterly',d:'By 60 days after quarter-end (mid-Feb, mid-May, mid-Aug, mid-Nov)',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund I (US RIA)',c:'Operations',t:'Collect quarterly account statements from portfolio funds',f:'Quarterly',d:'By 60 days after quarter-end',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund I (US RIA)',c:'Operations',t:'Collect quarterly information from direct investments',f:'Quarterly',d:'By 60 days after quarter-end',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund I (US RIA)',c:'Operations',t:'Send email requesting quarterly call with managers',f:'Quarterly',d:'By 60 days after quarter-end',p:'Medium',s:'Not Started'},
+  {e:'Sky Pointer Fund I (US RIA)',c:'Operations',t:'Fund master file update',f:'Quarterly',d:'By 70 days after quarter-end',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund I (US RIA)',c:'Operations',t:'Update fund information in valuation model',f:'Quarterly',d:'By 80 days after quarter-end',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund I (US RIA)',c:'Operations',t:'Quarterly manager commentary',f:'Quarterly',d:'By 70 days after quarter-end',p:'Medium',s:'Not Started'},
+  {e:'Sky Pointer Fund I (US RIA)',c:'Operations',t:'Prepare fund quarterly report',f:'Quarterly',d:'By 80 days after quarter-end',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund I (US RIA)',c:'Operations',t:'Send quarterly report to investors',f:'Quarterly',d:'By 90 days after quarter-end',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund I (US RIA)',c:'Operations',t:'Update invested capital – management fee calculation',f:'Quarterly',d:'By the last business day of each quarter',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund I (US RIA)',c:'Operations',t:'Management fee calculation and invoicing',f:'Quarterly',d:'Within 15 days of quarter-end',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund I (US RIA)',c:'Operations',t:'Collect audited account statements from investments',f:'Annual',d:'By Jun 30',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund I (US RIA)',c:'Operations',t:'Review & approve administrator NAV pack',f:'Annual',d:'By Apr 30 (following Dec 31 fiscal year-end)',p:'Critical',s:'Not Started'},
+  {e:'Sky Pointer Fund I (US RIA)',c:'Operations',t:'AGM – preparation & logistics',f:'Annual',d:'Typically Q4 (October–November)',p:'Medium',s:'Not Started'},
+  {e:'Sky Pointer Fund I (US RIA)',c:'Operations',t:'Collect K-1s from portfolio funds',f:'Annual',d:'By Jul 15',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund I (US RIA)',c:'Operations',t:'Collect K-1s from direct investments',f:'Annual',d:'By Jul 15',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund I (US RIA)',c:'Financial',t:'Prepare annual portfolio valuation report',f:'Annual',d:'By Apr 30 (first quarter following Dec 31 fiscal year-end)',p:'Critical',s:'Not Started'},
+  {e:'Sky Pointer Fund I (US RIA)',c:'Financial',t:'Annual audited financial statements',f:'Annual',d:'By Apr 30 (within 180 days of Dec 31 FYE per typical LPA)',p:'Critical',s:'Not Started'},
+  {e:'Sky Pointer Fund I (US RIA)',c:'Financial',t:'Annual report & accounts to LPs',f:'Annual',d:'By Apr 30 (within 180 days of Dec 31 FYE per typical LPA)',p:'Critical',s:'Not Started'},
+  {e:'Sky Pointer Fund I (US RIA)',c:'Financial',t:'K-1s for fund investors',f:'Annual',d:'By Jul 31',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund I (US RIA)',c:'Administrative',t:'Monthly Sky Pointer investment meeting',f:'Monthly',d:'By the last business day of each month',p:'Medium',s:'Not Started'},
+  {e:'Sky Pointer Fund I (US RIA)',c:'Administrative',t:'Investment memo for opportunities',f:'Monthly',d:'By the 5th business day of the following month',p:'Medium',s:'Not Started'},
+  {e:'Sky Pointer Fund I (US RIA)',c:'Administrative',t:'LPAC / Advisory Committee meeting',f:'Annual',d:'Typically Q2 (April–June)',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund I (US RIA)',c:'Administrative',t:'Registered office address / statutory filings',f:'Annual',d:'By Dec 31',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund I (US RIA)',c:'Administrative',t:'Insurance renewals review',f:'Annual',d:'By Jun 30',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 LP (US RIA)',c:'Regulatory',t:'EDGAR Account Setup',f:'One Time',d:'At inception',p:'Low',s:'Completed'},
+  {e:'Sky Pointer Fund 2 LP (US RIA)',c:'Regulatory',t:'IARD Account Setup',f:'One Time',d:'At inception',p:'Low',s:'Completed'},
+  {e:'Sky Pointer Fund 2 LP (US RIA)',c:'Regulatory',t:'Blue Sky / state notice filings – initial',f:'One Time',d:'Within 15 calendar days',p:'High',s:'Completed'},
+  {e:'Sky Pointer Fund 2 LP (US RIA)',c:'Regulatory',t:'Compliance program establishment',f:'One Time',d:'Before RIA registration',p:'High',s:'Completed'},
+  {e:'Sky Pointer Fund 2 LP (US RIA)',c:'Regulatory',t:'Form ADV annual update – parts 1A, 1B, 2A & 2B',f:'Annual',d:'By Mar 31 (within 90 days of Dec 31 fiscal year-end)',p:'Critical',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 LP (US RIA)',c:'Regulatory',t:'Form D annual amendment',f:'Annual',d:'By Mar 31',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 LP (US RIA)',c:'Regulatory',t:'Blue Sky annual renewals',f:'Annual',d:'By Dec 31',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 LP (US RIA)',c:'Regulatory',t:'Annual compliance review – Rule 206(4)-7',f:'Annual',d:'By Mar 31',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 LP (US RIA)',c:'Operations',t:'Update cash summary on master file',f:'Monthly',d:'By the 5th business day of the following month',p:'Medium',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 LP (US RIA)',c:'Operations',t:'Update accounting folder with invoice register',f:'Monthly',d:'By the 5th business day of the following month',p:'Medium',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 LP (US RIA)',c:'Operations',t:'Collect quarterly reports from invested funds',f:'Quarterly',d:'By 60 days after quarter-end',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 LP (US RIA)',c:'Operations',t:'Collect quarterly account statements',f:'Quarterly',d:'By 60 days after quarter-end',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 LP (US RIA)',c:'Operations',t:'Collect quarterly information from direct investments',f:'Quarterly',d:'By 60 days after quarter-end',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 LP (US RIA)',c:'Operations',t:'Send email requesting quarterly call',f:'Quarterly',d:'By 60 days after quarter-end',p:'Medium',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 LP (US RIA)',c:'Operations',t:'Fund master file update',f:'Quarterly',d:'By 70 days after quarter-end',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 LP (US RIA)',c:'Operations',t:'Update fund information in valuation model',f:'Quarterly',d:'By 80 days after quarter-end',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 LP (US RIA)',c:'Operations',t:'Quarterly manager commentary',f:'Quarterly',d:'By 70 days after quarter-end',p:'Medium',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 LP (US RIA)',c:'Operations',t:'Prepare fund quarterly report',f:'Quarterly',d:'By 80 days after quarter-end',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 LP (US RIA)',c:'Operations',t:'Send quarterly report to investors',f:'Quarterly',d:'By 90 days after quarter-end',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 LP (US RIA)',c:'Operations',t:'Update invested capital – management fee calculation',f:'Quarterly',d:'By the last business day of each quarter',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 LP (US RIA)',c:'Operations',t:'Management fee calculation and invoicing',f:'Quarterly',d:'Within 15 days of quarter-end',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 LP (US RIA)',c:'Operations',t:'Collect audited account statements',f:'Annual',d:'By Jun 30',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 LP (US RIA)',c:'Operations',t:'Review & approve administrator NAV pack',f:'Annual',d:'By Apr 30',p:'Critical',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 LP (US RIA)',c:'Operations',t:'AGM – preparation & logistics',f:'Annual',d:'Typically Q4',p:'Medium',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 LP (US RIA)',c:'Operations',t:'Collect K-1s from portfolio funds',f:'Annual',d:'By Jul 15',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 LP (US RIA)',c:'Operations',t:'Collect K-1s from direct investments',f:'Annual',d:'By Jul 15',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 LP (US RIA)',c:'Financial',t:'Prepare annual portfolio valuation report',f:'Annual',d:'By Apr 30',p:'Critical',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 LP (US RIA)',c:'Financial',t:'Annual audited financial statements',f:'Annual',d:'By Apr 30',p:'Critical',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 LP (US RIA)',c:'Financial',t:'Annual report & accounts to LPs',f:'Annual',d:'By Apr 30',p:'Critical',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 LP (US RIA)',c:'Financial',t:'K-1s for fund investors',f:'Annual',d:'By Jul 31',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 LP (US RIA)',c:'Administrative',t:'Monthly Sky Pointer investment meeting',f:'Monthly',d:'By the last business day of each month',p:'Medium',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 LP (US RIA)',c:'Administrative',t:'Investment memo for opportunities',f:'Monthly',d:'By the 5th business day of the following month',p:'Medium',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 LP (US RIA)',c:'Administrative',t:'LPAC / Advisory Committee meeting',f:'Annual',d:'Typically Q2 (April–June)',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 LP (US RIA)',c:'Administrative',t:'Registered office address / statutory filings',f:'Annual',d:'By Dec 31',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 LP (US RIA)',c:'Administrative',t:'Insurance renewals review',f:'Annual',d:'By Jun 30',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Regulatory',t:'Autorización CNMV – solicitud de registro como SCR',f:'One Time',d:'Previa al inicio',p:'Low',s:'Completed'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Regulatory',t:'Inscripción en el Registro Mercantil',f:'One Time',d:'Simultánea a la solicitud CNMV',p:'Low',s:'Completed'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Regulatory',t:'Comunicación a la CNMV del nombramiento de depositario',f:'One Time',d:'Antes del inicio',p:'High',s:'Completed'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Regulatory',t:'Programa de actividades y política de inversión',f:'One Time',d:'Previa a la autorización',p:'High',s:'Completed'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Regulatory',t:'Reglamento Interno de Conducta y política de conflictos',f:'One Time',d:'Antes del registro',p:'High',s:'Completed'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Regulatory',t:'Alta en sede electrónica CNMV (CIFRADOC / CIFIN)',f:'One Time',d:'Antes de la primera remisión',p:'High',s:'Completed'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Regulatory',t:'Estados reservados trimestrales – remisión a la CNMV (Circular 11/2008)',f:'Quarterly',d:'20 abr, 20 jul, 20 oct, 20 ene',p:'Critical',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Regulatory',t:'Coeficiente de inversión obligatoria (60% del activo computable)',f:'Quarterly',d:'By 60 days after quarter-end',p:'Critical',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Regulatory',t:'Valoración trimestral de la cartera – valor liquidativo',f:'Quarterly',d:'20 abr, 20 jul, 20 oct, 20 ene',p:'Critical',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Regulatory',t:'Reporting AIFMD – Annex IV (remisión a CNMV)',f:'Quarterly',d:'By 60 days after quarter-end',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Regulatory',t:'Informe semestral para accionistas',f:'Semestral',d:'1er semestre antes del 31 de agosto',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Regulatory',t:'Informe semestral del depositario a la CNMV (Circular 4/2016)',f:'Semestral',d:'31 jul y 28 feb',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Regulatory',t:'Cuentas anuales auditadas – depósito en CNMV y Registro Mercantil',f:'Annual',d:'By Jun 30',p:'Critical',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Regulatory',t:'Informe anual de auditoría – remisión a la CNMV',f:'Annual',d:'By Jun 30',p:'Critical',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Regulatory',t:'Comunicación anual de inversiones realizadas y desinversiones',f:'Annual',d:'By Jan 31',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Regulatory',t:'Revisión anual de política de inversión y programa de actividades',f:'Annual',d:'By Mar 31',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Regulatory',t:'Revisión anual del Reglamento Interno de Conducta',f:'Annual',d:'By Dec 31',p:'Medium',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Regulatory',t:'Revisión mensual de cumplimiento normativo – CNMV y Ley 22/2014',f:'Monthly',d:'By the last business day of each month',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Regulatory',t:'Revisión y actualización del registro de inversores – PBC/FT',f:'Monthly',d:'By the last business day of each month',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Regulatory',t:'Cribado de sanciones – inversores y contrapartes (OFAC, UE, ONU)',f:'Monthly',d:'By the last business day of each month',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Regulatory',t:'Informe anual de cumplimiento al consejo de administración',f:'Annual',d:'By Mar 31',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Regulatory',t:'Comunicación anual a inversores – política de inversión y conflictos',f:'Annual',d:'By Jun 30',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Regulatory',t:'Actualización del registro de protección de datos (RGPD)',f:'Annual',d:'By Dec 31',p:'Medium',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Regulatory',t:'Comunicación de hechos relevantes a la CNMV (art. 17 MAR)',f:'Event-Driven',d:'Immediately',p:'Critical',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Regulatory',t:'Notificación de adquisición de participaciones significativas (art. 28)',f:'Event-Driven',d:'Within 5 business days',p:'Critical',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Regulatory',t:'Comunicación de operaciones con partes vinculadas (art. 66)',f:'Event-Driven',d:'Before executing',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Operations',t:'Update cash summary on master file',f:'Monthly',d:'By the 5th business day of the following month',p:'Medium',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Operations',t:'Update accounting folder with invoice register',f:'Monthly',d:'By the 5th business day of the following month',p:'Medium',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Operations',t:'Collect quarterly reports from invested funds',f:'Quarterly',d:'By 60 days after quarter-end',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Operations',t:'Collect quarterly account statements',f:'Quarterly',d:'By 60 days after quarter-end',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Operations',t:'Collect quarterly information from direct investments',f:'Quarterly',d:'By 60 days after quarter-end',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Operations',t:'Fund master file update',f:'Quarterly',d:'By 70 days after quarter-end',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Operations',t:'Update fund information in valuation model',f:'Quarterly',d:'By 80 days after quarter-end',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Operations',t:'Prepare fund quarterly report',f:'Quarterly',d:'By 80 days after quarter-end',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Operations',t:'Send quarterly report to investors',f:'Quarterly',d:'By 90 days after quarter-end',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Operations',t:'Update invested capital – management fee calculation',f:'Quarterly',d:'By the last business day of each quarter',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Operations',t:'Management fee calculation and invoicing',f:'Quarterly',d:'Within 15 days of quarter-end',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Operations',t:'Carried interest accrual calculation',f:'Quarterly',d:'By 60 days after quarter-end',p:'Medium',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Operations',t:'Collect audited account statements',f:'Annual',d:'By Jun 30',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Operations',t:'Review & approve administrator NAV pack',f:'Annual',d:'By Apr 30',p:'Critical',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Operations',t:'Junta General Anual (AGM) – preparation & logistics',f:'Annual',d:'Typically Q4',p:'Medium',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Financial',t:'Quarterly financial statements (unaudited)',f:'Quarterly',d:'By 45 days after quarter-end',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Financial',t:'Annual audited financial statements',f:'Annual',d:'By Jun 30',p:'Critical',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Financial',t:'Coordinate statutory audit process',f:'Annual',d:'By Jun 30',p:'Critical',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Financial',t:'Annual report & accounts to LPs / shareholders',f:'Annual',d:'By Jun 30',p:'Critical',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Financial',t:'Capital account statement distribution to LPs',f:'Quarterly',d:'By 60 days after quarter-end',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Administrative',t:'Investment Committee meeting – Sky Pointer (approve / reject deals)',f:'Monthly',d:'By the last business day of each month',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Administrative',t:'Draft and distribute Investment Committee minutes',f:'Monthly',d:'By the 5th business day of the following month',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Administrative',t:'Investment Committee meeting – SCR (Spanish requirements)',f:'Event-Driven',d:'Materials 5 business days before meeting',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Administrative',t:'Comité de Supervisión de la SCR (Supervisory Committee)',f:'Annual',d:'Typically Q2 (April–June)',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Administrative',t:'Insurance renewals review',f:'Annual',d:'By Jun 30',p:'High',s:'Not Started'},
+  {e:'Sky Pointer Fund 2 SC-R (Spanish SCR – CNMV)',c:'Administrative',t:'Secondary transfer processing',f:'Monthly',d:'By the 5th business day of the following month',p:'Medium',s:'Not Started'},
+];
+const SPV_T=[
+  {c:'Regulatory',t:'SPV formation with HBS (Hamilton Bonadies Scherrer)',f:'One Time',d:'At fund launch',p:'Low',s:'Completed'},
+  {c:'Regulatory',t:'Prepare SS-4 form – application for EIN',f:'One Time',d:'Within 5 business days of entity formation',p:'Low',s:'Completed'},
+  {c:'Regulatory',t:'Obtain EIN number from IRS',f:'One Time',d:'Within 10 business days',p:'Low',s:'Completed'},
+  {c:'Regulatory',t:'Draft Limited Partnership Agreement (LPA) for SPV',f:'One Time',d:'Before first investor subscription',p:'High',s:'Completed'},
+  {c:'Regulatory',t:'Draft subscription documents for SPV',f:'One Time',d:'Before first investor subscription',p:'High',s:'Completed'},
+  {c:'Regulatory',t:'Set up SPV in Carta (cap table management)',f:'One Time',d:'Within 10 business days of entity formation',p:'Medium',s:'Completed'},
+  {c:'Regulatory',t:'Share Purchase Agreement (SPA) for acquisition',f:'One Time',d:'Before close of investment transaction',p:'High',s:'Completed'},
+  {c:'Regulatory',t:'Blue Sky / state notice filings – initial',f:'One Time',d:'Within 15 calendar days of first sale',p:'High',s:'Completed'},
+  {c:'Regulatory',t:'Form ADV amendment for ERA – include new SPV',f:'One Time',d:'Within 90 days of fiscal year-end following SPV launch',p:'High',s:'Not Started'},
+  {c:'Operations',t:'Prepare order book for investor control',f:'One Time',d:'Before first capital call',p:'Medium',s:'Completed'},
+  {c:'Operations',t:'Open SPV bank account',f:'One Time',d:'Within 10 business days of EIN receipt',p:'High',s:'Completed'},
+  {c:'Operations',t:'Provide Carta with access to SPV bank account',f:'One Time',d:'Within 5 business days of account opening',p:'Medium',s:'Completed'},
+  {c:'Operations',t:'Capital call notice – preparation & distribution',f:'One Time',d:'At each closing',p:'High',s:'Completed'},
+  {c:'Operations',t:'Structuring fee net calculation and invoice',f:'One Time',d:'Within 5 business days of final close',p:'Medium',s:'Completed'},
+  {c:'Operations',t:'Collect portfolio company financials, KPIs & news',f:'Quarterly',d:'By 45 days after quarter-end (mid-Feb, mid-May, mid-Aug, mid-Nov)',p:'High',s:'Not Started'},
+  {c:'Operations',t:'Valuation update (fair value assessment)',f:'Quarterly',d:'By 60 days after quarter-end',p:'High',s:'Not Started'},
+  {c:'Operations',t:'Prepare quarterly update report',f:'Quarterly',d:'By 70 days after quarter-end',p:'High',s:'Not Started'},
+  {c:'Operations',t:'Send quarterly update to investors',f:'Quarterly',d:'By 80 days after quarter-end',p:'High',s:'Not Started'},
+  {c:'Operations',t:'Cash reconciliation – SPV bank account & update order book',f:'Monthly',d:'By the 5th business day of the following month',p:'Medium',s:'Not Started'},
+  {c:'Operations',t:'Management fee calculation and invoicing',f:'Quarterly',d:'Within 15 days of quarter-end',p:'High',s:'Not Started'},
+  {c:'Operations',t:'Carried interest accrual calculation',f:'Quarterly',d:'By 60 days after quarter-end',p:'Medium',s:'Not Started'},
+  {c:'Operations',t:'Coordinate with fund administrator – quarterly closing',f:'Quarterly',d:'By 60 days after quarter-end',p:'High',s:'Not Started'},
+  {c:'Operations',t:'Review & approve administrator NAV pack (quarterly)',f:'Quarterly',d:'By 65 days after quarter-end',p:'High',s:'Not Started'},
+  {c:'Financial',t:'Cash reconciliation – SPV bank account (financial close)',f:'Monthly',d:'By the 5th business day of the following month',p:'Medium',s:'Not Started'},
+  {c:'Financial',t:'Review quarterly investor statements',f:'Quarterly',d:'By 65 days after quarter-end',p:'High',s:'Not Started'},
+  {c:'Financial',t:'Coordinate with fund administrator – annual closing',f:'Annual',d:'By Mar 31 (following Dec 31 fiscal year-end)',p:'High',s:'Not Started'},
+  {c:'Financial',t:'Capital account statement distribution to LPs',f:'Annual',d:'By Apr 30 (following Dec 31 fiscal year-end)',p:'High',s:'Not Started'},
+  {c:'Financial',t:'Investor K-1s',f:'Annual',d:'By Jul 15 (extended K-1 deadline for fund partnerships)',p:'High',s:'Not Started'},
+  {c:'Financial',t:'Coordinate statutory audit process',f:'Annual',d:'By Jun 30',p:'High',s:'Not Started'},
+  {c:'Financial',t:'Annual audited financial statements',f:'Annual',d:'By Jun 30 (within 6 months of Dec 31 fiscal year-end)',p:'High',s:'Not Started'},
+  {c:'Financial',t:'Tax return filing (federal & state)',f:'Annual',d:'By Sep 15 (extended deadline for partnerships)',p:'High',s:'Not Started'},
+  {c:'Administrative',t:'Annual board effectiveness review',f:'Annual',d:'By Dec 31 each year',p:'Medium',s:'Not Started'},
+  {c:'Administrative',t:'LPAC / Advisory Committee meeting',f:'Annual',d:'Typically Q2 (April–June)',p:'Medium',s:'Not Started'},
+  {c:'Administrative',t:'Registered office address / statutory filings',f:'Annual',d:'By Dec 31',p:'High',s:'Not Started'},
+  {c:'Administrative',t:'Annual return / confirmation statement filing',f:'Annual',d:'By Jun 1',p:'High',s:'Not Started'},
+  {c:'Administrative',t:'Renew annual Delaware franchise fee',f:'Annual',d:'By Jun 1 each year',p:'High',s:'Not Started'},
+  {c:'Administrative',t:'Annual report preparation',f:'Annual',d:'By Jun 30 each year',p:'Medium',s:'Not Started'},
+  {c:'Administrative',t:'Secondary transfer processing',f:'Monthly',d:'By the 5th business day of the following month',p:'Medium',s:'Not Started'},
+];
+['SPV Scale','SPV DW','SPV MIDI','SPV Valon'].forEach(ent=>SPV_T.forEach(t=>BASE.push({...t,e:ent})));
+const ALL = BASE.map((t,i)=>({...t,id:'tk'+i}));
+
+// State
+let states={},overrides={},hist=[],responsible={},support={},spIds={},selEnt=ENTITIES[0],curTab='overview';
+let msalApp,token,me,saveQ={},saveTimer;
+
+function getSt(t){return states[t.id]||t.s;}
+function getEff(t){
+  const ov=overrides[t.id];if(ov)return new Date(ov);
+  const s=getSt(t);
+  if(s==='Completed'&&RECURRING.includes(t.f))return nextCycle(t.d,t.f);
+  return parseDue(t.d);
+}
+
+// SharePoint
+const SP=()=>`${CONFIG.siteUrl}/_api/web/lists/getbytitle('${encodeURIComponent(CONFIG.listName)}')/items`;
+async function spFetch(url,opts={}){
+  const r=await fetch(url,{...opts,headers:{'Authorization':'Bearer '+token,'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata',...(opts.headers||{})}});
+  if(!r.ok){const tx=await r.text();throw new Error('SP '+r.status+': '+tx);}
+  if(r.status===204)return null;
+  return r.json();
+}
+async function spLoad(){
+  setSI('saving');
+  try{
+    const d=await spFetch(SP()+'?$select=Id,Title,StateValue&$top=5000');
+    states={};overrides={};hist=[];spIds={};
+    (d.value||[]).forEach(item=>{
+      spIds[item.Title]=item.Id;
+      try{
+        const v=JSON.parse(item.StateValue||'{}');
+        if(item.Title==='__history__'){hist=v||[];return;}
+        if(v.status)states[item.Title]=v.status;
+        if(v.override)overrides[item.Title]=v.override;
+        if(v.responsible)responsible[item.Title]=v.responsible;
+        if(v.support)support[item.Title]=v.support;
+      }catch(e){}
+    });
+    setSI('');
+  }catch(e){setSI('err');console.error(e);}
+}
+async function spSave(key,val){
+  const body=JSON.stringify({Title:key,StateValue:JSON.stringify(val)});
+  if(spIds[key]){
+    await spFetch(SP()+'('+spIds[key]+')',{method:'POST',body,headers:{'X-HTTP-Method':'MERGE','IF-MATCH':'*'}});
+  }else{
+    const r=await spFetch(SP(),{method:'POST',body});
+    if(r)spIds[key]=r.Id;
+  }
+}
+function qSave(key,val){
+  setSI('saving');saveQ[key]=val;clearTimeout(saveTimer);
+  saveTimer=setTimeout(async()=>{
+    try{await Promise.all(Object.entries(saveQ).map(([k,v])=>spSave(k,v)));saveQ={};setSI('saved');setTimeout(()=>setSI(''),2000);}
+    catch(e){setSI('err');console.error(e);}
+  },800);
+}
+function setSI(st){
+  const el=document.getElementById('save-ind');if(!el)return;
+  el.className='save-ind'+(st?' si-'+st:'');
+  el.textContent={saving:'Saving…',saved:'Saved ✓',err:'Save error','loading':'Loading…','':''}[st]||st;
+}
+
+// Actions
+window.markDone=function(id){
+  const t=ALL.find(x=>x.id===id);if(!t)return;
+  const cur=getSt(t);
+  if(cur==='Not Started'||cur==='Overdue'){states[id]='In Progress';}
+  else if(cur==='In Progress'){
+    states[id]='Completed';
+    const eff=getEff(t);
+    hist.unshift({id,entity:t.e,cat:t.c,task:t.t,freq:t.f,
+      cycleLabel:fmtCycle(eff||parseDue(t.d),t.f),
+      completedBy:me?.name||'team',completedAt:new Date().toISOString()});
+    if(hist.length>1000)hist=hist.slice(0,1000);
+    qSave('__history__',hist);
+    if(RECURRING.includes(t.f)){
+      delete overrides[id];
+      setTimeout(()=>{states[id]='Not Started';qSave(id,{status:'Not Started',override:null});renderCur();},1200);
+    }
+  }else if(cur==='Completed'){states[id]='Not Started';}
+  qSave(id,{status:states[id],override:overrides[id]||null,responsible:responsible[id]||null,support:support[id]||null});
+  renderCur();
+};
+window.startOvr=function(id){
+  const t=ALL.find(x=>x.id===id);if(!t)return;
+  const el=document.getElementById('dc-'+id);if(!el)return;
+  const cur=getEff(t);const cs=cur?cur.toISOString().split('T')[0]:'';
+  el.innerHTML='<input class="due-inp" type="date" id="di-'+id+'" value="'+cs+'" onblur="saveOvr(\''+id+'\')" onkeydown="if(event.key===\'Enter\')saveOvr(\''+id+'\')" />';
+  setTimeout(()=>document.getElementById('di-'+id)?.focus(),30);
+};
+window.saveOvr=function(id){
+  const inp=document.getElementById('di-'+id);if(!inp)return;
+  const v=inp.value;
+  if(v){overrides[id]=v;}else{delete overrides[id];}
+  qSave(id,{status:states[id]||null,override:overrides[id]||null,responsible:responsible[id]||null,support:support[id]||null});
+  renderCur();
+};
+
+// Responsible / Support
+function getAssigned(store, id){ return store[id]||''; }
+function allAssigned(store){ return [...new Set(Object.values(store).filter(Boolean))].sort(); }
+
+window.startEditPerson=function(id, field){
+  const el=document.getElementById(field+'-'+id); if(!el)return;
+  const cur=(field==='res'?responsible:support)[id]||'';
+  el.innerHTML='<input class="person-inp" type="text" id="pi-'+field+'-'+id+'" value="'+cur+'" placeholder="Name..." onblur="savePerson(''+id+'',''+field+'')" onkeydown="if(event.key==='Enter')savePerson(''+id+'',''+field+'')" style="width:90px;font-size:12px;padding:2px 5px;border:1px solid var(--accent2);border-radius:4px;background:var(--surface);color:var(--text);font-family:var(--font)" />';
+  setTimeout(()=>document.getElementById('pi-'+field+'-'+id)?.focus(),30);
+};
+window.savePerson=function(id,field){
+  const inp=document.getElementById('pi-'+field+'-'+id); if(!inp)return;
+  const v=inp.value.trim();
+  if(field==='res'){if(v)responsible[id]=v;else delete responsible[id];}
+  else{if(v)support[id]=v;else delete support[id];}
+  qSave(id,{status:states[id]||null,override:overrides[id]||null,responsible:responsible[id]||null,support:support[id]||null});
+  renderCur();
+};
+
+function personCell(t, field){
+  const id=t.id, store=field==='res'?responsible:support;
+  const val=store[id]||'';
+  return '<td id="'+field+'-'+id+'" style="cursor:pointer;white-space:nowrap" onclick="startEditPerson(''+id+'',''+field+'')" title="Click to assign">'
+    +(val?'<span style="font-size:12px;color:var(--text)">'+val+'</span>':'<span style="font-size:11px;color:var(--text3)">—</span>')+'</td>';
+}
+
+// Render helpers
+function sbtn(t){
+  const s=getSt(t),id=t.id;
+  if(s==='Completed')return'<button class="sbtn s-dn" onclick="markDone(\''+id+'\')">✓ Done</button>';
+  if(s==='In Progress')return'<button class="sbtn s-ip" onclick="markDone(\''+id+'\')">● In progress</button>';
+  return'<button class="sbtn s-ns" onclick="markDone(\''+id+'\')">○ Not started</button>';
+}
+function dcell(t){
+  const id=t.id,d=getEff(t),ov=!!overrides[id],s=getSt(t),nx=s==='Completed'&&RECURRING.includes(t.f);
+  return'<td id="dc-'+id+'" class="'+dcls(d)+'" style="white-space:nowrap;cursor:pointer" onclick="startOvr(\''+id+'\')" title="Click to edit deadline">'
+    +(nx?'<span class="nxt">next: </span>':'')+'<span class="due-cl">'+dlbl(d)+'</span>'+(ov?'<span class="ovr">custom</span>':'')+'</td>';
+}
+
+// Tabs
+function renderCur(){if(curTab==='overview')rOv();else if(curTab==='entity')rEnt();else if(curTab==='upcoming')rUp();else rHist();}
+window.goTab=function(tab){
+  curTab=tab;
+  document.querySelectorAll('.nav-btn').forEach((b,i)=>b.classList.toggle('active',['overview','entity','upcoming','history'][i]===tab));
+  ['overview','entity','upcoming','history'].forEach(tp=>{document.getElementById('t-'+tp).style.display=tp===tab?'block':'none';});
+  renderCur();
+};
+window.pickEnt=function(ent){selEnt=ent;goTab('entity');};
+
+function rOv(){
+  const rec=ALL.filter(t=>RECURRING.includes(t.f));
+  let ov=0,sn=0,ip=0;
+  rec.forEach(t=>{const s=getSt(t);if(s==='Completed')return;if(s==='In Progress')ip++;const n=du(getEff(t));if(n!==null&&n<0)ov++;else if(n!==null&&n<=30)sn++;});
+  const cards=ENTITIES.map(e=>{
+    const ts=ALL.filter(t=>t.e===e),dn=ts.filter(t=>getSt(t)==='Completed').length,pct=Math.round(dn/ts.length*100);
+    const ovc=ts.filter(t=>{const s=getSt(t);if(s==='Completed'||!RECURRING.includes(t.f))return false;return du(getEff(t))<0;}).length;
+    const fc=pct>60?'#2d6a4f':pct>30?'#92400e':'#dc2626';
+    return'<div class="ecard'+(e===selEnt?' sel':'')+'" onclick="pickEnt(\''+e.replace(/'/g,"\\'")+'\')">'
+      +'<div class="ecard-name">'+ESHORT[e]+'</div>'
+      +'<div class="pbar"><div class="pfill" style="width:'+pct+'%;background:'+fc+'"></div></div>'
+      +'<div class="estats">'+pct+'% done'+(ovc>0?' &nbsp;·&nbsp; <span style="color:#dc2626">'+ovc+' overdue</span>':'')+'</div></div>';
+  }).join('');
+  document.getElementById('t-overview').innerHTML=
+    '<div class="metrics">'
+    +'<div class="metric"><div class="mlabel">Overdue</div><div class="mval mv-d">'+ov+'</div></div>'
+    +'<div class="metric"><div class="mlabel">Due in 30 days</div><div class="mval mv-w">'+sn+'</div></div>'
+    +'<div class="metric"><div class="mlabel">In progress</div><div class="mval mv-i">'+ip+'</div></div>'
+    +'<div class="metric"><div class="mlabel">Completions logged</div><div class="mval mv-s">'+hist.length+'</div></div>'
+    +'</div><div class="sec"><div class="sec-title">Entity progress</div><div class="egrid">'+cards+'</div></div>';
+}
+
+function rEnt(){
+  const pf=document.getElementById('ef-p')?.value||'',cf=document.getElementById('ef-c')?.value||'',ff=document.getElementById('ef-f')?.value||'';
+  let tasks=ALL.filter(t=>t.e===selEnt&&!(t.f==='One Time'&&getSt(t)==='Completed'));
+  if(pf)tasks=tasks.filter(t=>t.p===pf);
+  if(cf)tasks=tasks.filter(t=>t.c===cf);
+  if(ff)tasks=tasks.filter(t=>t.f===ff);
+  const rf=document.getElementById('ef-r')?.value||'';
+  const sf=document.getElementById('ef-s')?.value||'';
+  if(rf)tasks=tasks.filter(t=>responsible[t.id]===rf);
+  if(sf)tasks=tasks.filter(t=>support[t.id]===sf);
+  const ebar=ENTITIES.map(e=>'<button class="ebtn'+(e===selEnt?' active':'')+'" onclick="pickEnt(\''+e.replace(/'/g,"\\'")+'\')">'+(ESHORT[e]||e)+'</button>').join('');
+  const cats=[...new Set(tasks.map(t=>t.c))];
+  let body=cats.map(c=>{
+    const ct=tasks.filter(t=>t.c===c);
+    return'<div class="sec"><div class="sec-title">'+c+'</div><div class="cw"><table class="tbl">'
+      +'<thead><tr><th style="width:28%">Task</th><th style="width:9%">Frequency</th>'
+      +'<th style="width:12%">Deadline <span style="font-weight:400;opacity:.6">(click)</span></th>'
+      +'<th style="width:9%">Priority</th><th style="width:10%">Responsible</th><th style="width:10%">Support</th><th style="width:22%">Status</th></tr></thead><tbody>'
+      +ct.map(t=>'<tr><td class="tnm" title="'+t.t+'" style="max-width:0">'+t.t+'</td>'
+        +'<td><span class="fb">'+t.f+'</span></td>'+dcell(t)
+        +'<td><span class="badge b-'+t.p+'">'+t.p+'</span></td>'+personCell(t,'res')+personCell(t,'sup')+'<td>'+sbtn(t)+'</td></tr>').join('')
+      +'</tbody></table></div></div>';
+  }).join('')||'<div class="empty">No tasks match these filters.</div>';
+  document.getElementById('t-entity').innerHTML='<div class="ebar">'+ebar+'</div>'
+    +'<div class="frow"><label>Priority:</label>'
+    +'<select id="ef-p" onchange="rEnt()"><option value="">All</option><option>Critical</option><option>High</option><option>Medium</option><option>Low</option></select>'
+    +'<label>Category:</label><select id="ef-c" onchange="rEnt()"><option value="">All</option><option>Regulatory</option><option>Operations</option><option>Financial</option><option>Administrative</option></select>'
+    +'<label>Frequency:</label><select id="ef-f" onchange="rEnt()"><option value="">All</option><option>Monthly</option><option>Quarterly</option><option>Semestral</option><option>Annual</option><option>One Time</option><option>Event-Driven</option></select>'
+    +'<label>Responsible:</label><select id="ef-r" onchange="rEnt()"><option value="">All</option>'+allAssigned(responsible).map(n=>'<option>'+n+'</option>').join('')+'</select>'
+    +'<label>Support:</label><select id="ef-s" onchange="rEnt()"><option value="">All</option>'+allAssigned(support).map(n=>'<option>'+n+'</option>').join('')+'</select>'
+    +'</div>'+body;
+}
+
+function rUp(){
+  const win=parseInt(document.getElementById('uw')?.value||60),pf=document.getElementById('upr')?.value||'';
+  let tasks=ALL.filter(t=>{
+    if(t.f==='Event-Driven'||(t.f==='One Time'&&getSt(t)==='Completed'))return false;
+    const n=du(getEff(t));return n!==null&&n>=-7&&n<=win;
+  });
+  if(pf)tasks=tasks.filter(t=>t.p===pf);
+  tasks.sort((a,b)=>(getEff(a)||new Date(9999,0,1))-(getEff(b)||new Date(9999,0,1)));
+  const rows=tasks.length?tasks.map(t=>{
+    const s=getSt(t),nx=s==='Completed'&&RECURRING.includes(t.f),d=getEff(t),ov=!!overrides[t.id];
+    return'<tr><td style="font-size:12px;color:var(--text2)">'+(ESHORT[t.e]||t.e)+'</td>'
+      +'<td class="tnm" title="'+t.t+'" style="max-width:0">'+t.t+'</td>'
+      +'<td><span class="fb">'+t.f+'</span></td>'
+      +'<td id="dc-'+t.id+'" class="'+dcls(d)+'" style="white-space:nowrap;cursor:pointer" onclick="startOvr(\''+t.id+'\')" title="Click to edit">'
+      +(nx?'<span class="nxt">next: </span>':'')+'<span class="due-cl">'+dlbl(d)+'</span>'+(ov?'<span class="ovr">custom</span>':'')+'</td>'
+      +'<td><span class="badge b-'+t.p+'">'+t.p+'</span></td>'+personCell(t,'res')+'<td>'+sbtn(t)+'</td></tr>';
+  }).join(''):'<tr><td colspan="6" style="padding:2.5rem;text-align:center;color:var(--text2)">No tasks in this window.</td></tr>';
+  document.getElementById('t-upcoming').innerHTML=
+    '<div class="frow"><label>Window:</label>'
+    +'<select id="uw" onchange="rUp()"><option value="30">30 days</option><option value="60" selected>60 days</option><option value="90">90 days</option></select>'
+    +'<label>Priority:</label><select id="upr" onchange="rUp()"><option value="">All</option><option>Critical</option><option>High</option></select></div>'
+    +'<div class="cw"><table class="tbl"><thead><tr><th>Entity</th><th>Task</th><th>Frequency</th>'
+    +'<th>Deadline <span style="font-weight:400;opacity:.6">(click to edit)</span></th><th>Priority</th><th>Responsible</th><th>Status</th></tr></thead>'
+    +'<tbody>'+rows+'</tbody></table></div>';
+}
+
+function rHist(){
+  const ef=document.getElementById('hf-e')?.value||'',cf=document.getElementById('hf-c')?.value||'';
+  let h=hist;if(ef)h=h.filter(x=>x.entity===ef);if(cf)h=h.filter(x=>x.cat===cf);
+  const rows=h.length?h.map(x=>{
+    const cd=new Date(x.completedAt);
+    return'<div class="hrow"><div class="hdot"></div><div class="hbody">'
+      +'<div class="htask" title="'+x.task+'">'+x.task+'</div>'
+      +'<div class="hmeta">'+(ESHORT[x.entity]||x.entity)+' &nbsp;·&nbsp; '+x.cat+' &nbsp;·&nbsp; <span class="hcycle">'+(x.cycleLabel||x.freq)+'</span> &nbsp;·&nbsp; '+x.completedBy+'</div>'
+      +'</div><div class="hts">'+cd.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})+'<br><span style="font-size:10px">'+cd.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+'</span></div></div>';
+  }).join(''):'<div style="padding:2.5rem;text-align:center;color:var(--text2);font-size:14px">No completions logged yet.</div>';
+  document.getElementById('t-history').innerHTML=
+    '<div class="frow"><label>Entity:</label>'
+    +'<select id="hf-e" onchange="rHist()"><option value="">All entities</option>'+ENTITIES.map(e=>'<option value="'+e+'">'+ESHORT[e]+'</option>').join('')+'</select>'
+    +'<label>Category:</label><select id="hf-c" onchange="rHist()"><option value="">All</option><option>Regulatory</option><option>Operations</option><option>Financial</option><option>Administrative</option></select></div>'
+    +'<div class="cw"><div style="max-height:520px;overflow-y:auto">'+rows+'</div></div>';
+}
+
+// Auth
+async function boot(){
+  if(!CONFIGURED){
+    document.getElementById('config-banner').style.display='block';
+    document.getElementById('setup-guide-inline').innerHTML=setupGuide();
+    const btn=document.getElementById('sign-in-btn');btn.disabled=true;
+    return;
+  }
+  msalApp=new msal.PublicClientApplication({
+    auth:{clientId:CONFIG.clientId,authority:'https://login.microsoftonline.com/'+CONFIG.tenantId,redirectUri:location.href.split('?')[0]},
+    cache:{cacheLocation:'sessionStorage'}
+  });
+  await msalApp.initialize();
+  const rsp=await msalApp.handleRedirectPromise();
+  if(rsp){await signedIn(rsp);return;}
+  const accs=msalApp.getAllAccounts();
+  if(accs.length>0){
+    try{const silent=await msalApp.acquireTokenSilent({scopes:['User.Read','Sites.ReadWrite.All'],account:accs[0]});await signedIn(silent);}
+    catch(e){console.log('Silent failed',e);}
+  }
+}
+document.getElementById('sign-in-btn').addEventListener('click',async()=>{
+  try{const r=await msalApp.loginPopup({scopes:['User.Read','Sites.ReadWrite.All']});await signedIn(r);}
+  catch(e){const el=document.getElementById('auth-err');el.style.display='block';el.textContent='Sign-in failed: '+(e.message||e);}
+});
+async function signedIn(r){
+  token=r.accessToken;
+  me={name:r.account.name,email:r.account.username};
+  document.getElementById('u-name').textContent=me.name.split(' ')[0];
+  document.getElementById('u-avatar').textContent=me.name.split(' ').map(n=>n[0]).slice(0,2).join('');
+  document.getElementById('auth-screen').style.display='none';
+  document.getElementById('app').style.display='block';
+  await spLoad();
+  rOv();
+}
+window.doSignOut=function(){msalApp.logoutPopup();document.getElementById('auth-screen').style.display='flex';document.getElementById('app').style.display='none';};
+
+function setupGuide(){
+  return'<div class="sg"><h2>Setup guide</h2>'
+    +'<div class="sg-step"><div class="sg-n">1</div><div class="sg-b"><div class="sg-title">Create a SharePoint List</div>'
+    +'<div class="sg-desc">In your SharePoint subsite → <strong>New → List → Blank list</strong>. Name it exactly <code>SP Ops Dashboard</code>. Add one extra column: <code>StateValue</code>, type <strong>Multiple lines of text</strong>. Leave everything else as default.</div></div></div>'
+    +'<div class="sg-step"><div class="sg-n">2</div><div class="sg-b"><div class="sg-title">Register an Azure AD app</div>'
+    +'<div class="sg-desc">Go to <code>portal.azure.com → Azure Active Directory → App registrations → New registration</code>. Name: <code>SP Ops Dashboard</code>. Under Redirect URI, choose <strong>Single-page application (SPA)</strong> and enter the URL where you will host this file. Under <em>API permissions</em>, add <code>Microsoft Graph → User.Read</code> (delegated) and <code>SharePoint → Sites.ReadWrite.All</code> (delegated). Click <strong>Grant admin consent</strong>.</div></div></div>'
+    +'<div class="sg-step"><div class="sg-n">3</div><div class="sg-b"><div class="sg-title">Edit the CONFIG block in this file</div>'
+    +'<div class="sg-desc">Open <code>SkyPointer_OpsDashboard.html</code> in any text editor (Notepad, VS Code). Find the <code>CONFIG</code> block near the top of the &lt;script&gt; section. Paste in your <code>clientId</code> (App Registration → Overview → Application ID), <code>tenantId</code> (Azure AD → Overview → Tenant ID), and your <code>siteUrl</code> (e.g. <code>https://yourorg.sharepoint.com/sites/yoursubsite</code>).</div></div></div>'
+    +'<div class="sg-step"><div class="sg-n">4</div><div class="sg-b"><div class="sg-title">Upload & share the file</div>'
+    +'<div class="sg-desc">Upload the edited HTML file to a SharePoint Document Library in your subsite. Right-click → Share and send the direct link to your team. They sign in with their existing Microsoft 365 account — no new accounts or installs needed.</div></div></div></div>';
+}
+
+boot();
+</script>
+</body>
+</html>

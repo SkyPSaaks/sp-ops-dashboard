@@ -519,11 +519,11 @@ function allAssigned(store){ return [...new Set(Object.values(store).filter(Bool
 window.startEditPerson=function(id, field){
   const el=document.getElementById(field+'-'+id); if(!el)return;
   const cur=(field==='res'?responsible:support)[id]||'';
-  el.innerHTML='<input class="person-inp" type="text" id="pi-'+field+'-'+id+'" value="'+cur+'" placeholder="Name..." onblur="savePerson(''+id+'',''+field+'')" onkeydown="if(event.key==='Enter')savePerson(''+id+'',''+field+'')" style="width:90px;font-size:12px;padding:2px 5px;border:1px solid var(--accent2);border-radius:4px;background:var(--surface);color:var(--text);font-family:var(--font)" />';
+  el.innerHTML='<input class="person-inp" type="text" id="pi-'+field+'-'+id+'" value="'+cur.replace(/"/g,'&quot;')+'" placeholder="Name..." onblur="savePerson(this,\''+id+'\',\''+field+'\')" onkeydown="if(event.key===\'Enter\')savePerson(this,\''+id+'\',\''+field+'\')" style="width:90px;font-size:12px;padding:2px 5px;border:1px solid var(--accent2);border-radius:4px;background:var(--surface);color:var(--text);font-family:var(--font)" />';
   setTimeout(()=>document.getElementById('pi-'+field+'-'+id)?.focus(),30);
 };
-window.savePerson=function(id,field){
-  const inp=document.getElementById('pi-'+field+'-'+id); if(!inp)return;
+window.savePerson=function(el,id,field){
+  const inp=el||document.getElementById('pi-'+field+'-'+id); if(!inp)return;
   const v=inp.value.trim();
   if(field==='res'){if(v)responsible[id]=v;else delete responsible[id];}
   else{if(v)support[id]=v;else delete support[id];}
@@ -534,7 +534,7 @@ window.savePerson=function(id,field){
 function personCell(t, field){
   const id=t.id, store=field==='res'?responsible:support;
   const val=store[id]||'';
-  return '<td id="'+field+'-'+id+'" style="cursor:pointer;white-space:nowrap" onclick="startEditPerson(''+id+'',''+field+'')" title="Click to assign">'
+  return '<td id="'+field+'-'+id+'" style="cursor:pointer;white-space:nowrap" onclick="startEditPerson(\''+id+'\',\''+field+'\')" title="Click to assign">'
     +(val?'<span style="font-size:12px;color:var(--text)">'+val+'</span>':'<span style="font-size:11px;color:var(--text3)">—</span>')+'</td>';
 }
 

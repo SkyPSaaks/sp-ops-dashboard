@@ -218,45 +218,48 @@ function parseDue(txt){
   if(t.includes('q4')||t.includes('october–november'))return new Date(y,9,31);
   return null;
 }
-function nextCycle(dueTxt,freq){
+function nextCycle(dueTxt,freq,currentDeadline){
+  // currentDeadline = the deadline being completed, so next is one cycle AFTER that
   const base=parseDue(dueTxt);if(!base)return null;
   const y=TODAY.getFullYear();
+  const cur=currentDeadline||base; // the date we're rolling FROM
 
   if(freq==='Monthly'){
-    // Next month, same day-of-month as original deadline
-    return new Date(TODAY.getFullYear(),TODAY.getMonth()+1,base.getDate());
+    // Next cycle = one month after the current deadline month
+    return new Date(cur.getFullYear(),cur.getMonth()+1,base.getDate());
   }
 
   if(freq==='Quarterly'){
-    // Calculate offset from nearest quarter-end to base date
-    // Find the quarter-end that base was relative to
-    const allQ=[new Date(y-1,11,31),new Date(y,2,31),new Date(y,5,30),new Date(y,8,30),new Date(y,11,31),new Date(y+1,2,31)];
-    // Find offset: how many days after a quarter-end is the deadline?
+    // Find the quarter-end that the current deadline falls after
+    const allQ=[new Date(y-1,11,31),new Date(y,2,31),new Date(y,5,30),new Date(y,8,30),new Date(y,11,31),new Date(y+1,2,31),new Date(y+2,2,31)];
     let off=0;
     for(let i=0;i<allQ.length-1;i++){
-      if(base>allQ[i]&&base<=new Date(allQ[i].getTime()+120*864e5)){
-        off=Math.round((base-allQ[i])/864e5);
+      if(cur>allQ[i]&&cur<=new Date(allQ[i].getTime()+120*864e5)){
+        off=Math.round((cur-allQ[i])/864e5);
         break;
       }
     }
-    // Now find next quarter-end after TODAY and add offset
-    const futureQ=[new Date(y,2,31),new Date(y,5,30),new Date(y,8,30),new Date(y,11,31),new Date(y+1,2,31)];
-    for(let q of futureQ){
-      const c=new Date(q.getTime()+off*864e5);
-      if(c>TODAY)return c;
+    // Next quarter-end AFTER the current deadline's quarter-end
+    let foundCurQ=false;
+    for(let i=0;i<allQ.length-1;i++){
+      const qend=allQ[i];
+      const candidate=new Date(qend.getTime()+off*864e5);
+      if(foundCurQ && candidate>TODAY) return candidate;
+      if(cur>qend && cur<=new Date(qend.getTime()+120*864e5)) foundCurQ=true;
     }
     return null;
   }
 
   if(freq==='Semestral'){
-    const candidates=[new Date(y,7,31),new Date(y+1,1,28),new Date(y+1,7,31)];
-    for(let c of candidates)if(c>TODAY)return c;
+    // Next semester after current deadline
+    const candidates=[new Date(y,7,31),new Date(y+1,1,28),new Date(y+1,7,31),new Date(y+2,1,28)];
+    for(let c of candidates)if(c>cur)return c;
     return null;
   }
 
   if(freq==='Annual'){
-    let d=new Date(base);
-    while(d<=TODAY)d=new Date(d.getFullYear()+1,d.getMonth(),d.getDate());
+    // Next year after current deadline
+    let d=new Date(cur.getFullYear()+1,base.getMonth(),base.getDate());
     return d;
   }
   return base;
@@ -555,8 +558,10 @@ window.rollToNextCycle=async function(){
   if(!doneTasks.length)return;
   doneTasks.forEach(t=>{
     const id=t.id;
-    // Calculate next natural deadline from base definition (ignore any override)
-    const nextDue=nextCycle(t.d,t.f);
+    // Get the current deadline (what's being completed) to roll FROM
+    const curDue=parseDue(t.d);
+    // Calculate next natural deadline from base definition, rolling from current deadline
+    const nextDue=nextCycle(t.d,t.f,curDue);
     const nextDueStr=nextDue?nextDue.toISOString().split('T')[0]:null;
     // Reset status and clear override, store natural next deadline
     states[id]='Not Started';

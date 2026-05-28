@@ -85,9 +85,6 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .d-ov{color:#dc2626;font-weight:600}
 .d-sn{color:#d97706;font-weight:500}
 .d-ok{color:var(--text2)}
-.due-cl{cursor:pointer;border-bottom:1px dashed var(--border)}
-.due-cl:hover{border-bottom-color:var(--accent2);color:var(--accent)}
-.due-inp{font-size:12px;padding:3px 7px;border-radius:4px;border:1px solid var(--accent2);background:var(--surface);color:var(--text);width:118px;font-family:var(--font)}
 .ovr{font-size:10px;background:var(--warn-bg);color:var(--warn);border-radius:10px;padding:1px 6px;margin-left:4px;font-weight:600}
 .nxt{font-size:10px;color:var(--text3);margin-right:2px}
 .hrow{display:flex;align-items:flex-start;gap:12px;padding:11px 14px;border-bottom:1px solid var(--border)}
@@ -452,9 +449,12 @@ let msalApp,token,me,saveQ={},saveTimer;
 
 function getSt(t){return states[t.id]||t.s;}
 function getEff(t){
-  const ov=overrides[t.id];if(ov)return new Date(ov);
   const s=getSt(t);
-  if(s==='Completed'&&RECURRING.includes(t.f))return nextCycle(t.d,t.f);
+  // For Done tasks: show current natural deadline (what was due this cycle)
+  if(s==='Completed') return parseDue(t.d);
+  // For Not Started: use stored next-cycle date if available (set by Roll), else natural
+  const ov=overrides[t.id];
+  if(ov) return new Date(ov);
   return parseDue(t.d);
 }
 
@@ -544,23 +544,8 @@ window.markDone=function(id){
     qSave('__history__',hist);
     // Done stays Done - user must press "Roll to next cycle" to advance
   }else if(cur==='Completed'){states[id]='Not Started';}
-  // Save status; preserve existing override (don't overwrite with stale value)
-  qSave(id,{status:states[id],override:overrides[id]||null,responsible:responsible[id]||null,support:support[id]||null});
+  qSave(id,{status:states[id],override:null,responsible:responsible[id]||null,support:support[id]||null});
   updateRollBtn();
-  renderCur();
-};
-window.startOvr=function(id){
-  const t=ALL.find(x=>x.id===id);if(!t)return;
-  const el=document.getElementById('dc-'+id);if(!el)return;
-  const cur=getEff(t);const cs=cur?cur.toISOString().split('T')[0]:'';
-  el.innerHTML='<input class="due-inp" type="date" id="di-'+id+'" value="'+cs+'" onblur="saveOvr(\''+id+'\')" onkeydown="if(event.key===\'Enter\')saveOvr(\''+id+'\')" />';
-  setTimeout(()=>document.getElementById('di-'+id)?.focus(),30);
-};
-window.saveOvr=function(id){
-  const inp=document.getElementById('di-'+id);if(!inp)return;
-  const v=inp.value;
-  if(v){overrides[id]=v;}else{delete overrides[id];}
-  qSave(id,{status:states[id]||null,override:overrides[id]||null,responsible:responsible[id]||null,support:support[id]||null});
   renderCur();
 };
 
@@ -577,6 +562,7 @@ window.rollToNextCycle=async function(){
     states[id]='Not Started';
     if(nextDueStr){overrides[id]=nextDueStr;}else{delete overrides[id];}
     saveQ[id]={status:'Not Started',override:nextDueStr||null,responsible:responsible[id]||null,support:support[id]||null};
+    // override here stores the pre-calculated next cycle date
   });
   updateRollBtn();
   renderCur();
@@ -633,8 +619,7 @@ function sbtn(t){
 }
 function dcell(t){
   const id=t.id,d=getEff(t),ov=!!overrides[id],s=getSt(t),nx=s==='Completed'&&RECURRING.includes(t.f);
-  return'<td id="dc-'+id+'" class="'+dcls(d)+'" style="white-space:nowrap;cursor:pointer" onclick="startOvr(\''+id+'\')" title="Click to edit deadline">'
-    +(nx?'<span class="nxt">next: </span>':'')+'<span class="due-cl">'+dlbl(d)+'</span>'+(ov?'<span class="ovr">custom</span>':'')+'</td>';
+  return'<td class="'+dcls(d)+'" style="white-space:nowrap">'+(nx?'<span class="nxt">next: </span>':'')+'<span>'+dlbl(d)+'</span></td>';
 }
 
 // Tabs
@@ -685,7 +670,7 @@ function rEnt(){
     const ct=tasks.filter(t=>t.c===c);
     return'<div class="sec"><div class="sec-title">'+c+'</div><div class="cw"><table class="tbl">'
       +'<thead><tr><th style="width:28%">Task</th><th style="width:9%">Frequency</th>'
-      +'<th style="width:12%">Deadline <span style="font-weight:400;opacity:.6">(click)</span></th>'
+      +'<th style="width:12%">Deadline</th>'
       +'<th style="width:9%">Priority</th><th style="width:10%">Responsible</th><th style="width:10%">Support</th><th style="width:22%">Status</th></tr></thead><tbody>'
       +ct.map(t=>'<tr><td class="tnm" title="'+t.t+'" style="max-width:0">'+t.t+'</td>'
         +'<td><span class="fb">'+t.f+'</span></td>'+dcell(t)
@@ -715,8 +700,7 @@ function rUp(){
     return'<tr><td style="font-size:12px;color:var(--text2)">'+(ESHORT[t.e]||t.e)+'</td>'
       +'<td class="tnm" title="'+t.t+'" style="max-width:0">'+t.t+'</td>'
       +'<td><span class="fb">'+t.f+'</span></td>'
-      +'<td id="dc-'+t.id+'" class="'+dcls(d)+'" style="white-space:nowrap;cursor:pointer" onclick="startOvr(\''+t.id+'\')" title="Click to edit">'
-      +(nx?'<span class="nxt">next: </span>':'')+'<span class="due-cl">'+dlbl(d)+'</span>'+(ov?'<span class="ovr">custom</span>':'')+'</td>'
+      +'<td class="'+dcls(d)+'" style="white-space:nowrap">'+(nx?'<span class="nxt">next: </span>':'')+'<span>'+dlbl(d)+'</span></td>'
       +'<td><span class="badge b-'+t.p+'">'+t.p+'</span></td>'+personCell(t,'res')+'<td>'+sbtn(t)+'</td></tr>';
   }).join(''):'<tr><td colspan="6" style="padding:2.5rem;text-align:center;color:var(--text2)">No tasks in this window.</td></tr>';
   document.getElementById('t-upcoming').innerHTML=

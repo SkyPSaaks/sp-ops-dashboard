@@ -139,6 +139,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
         <div class="user-avatar" id="u-avatar">–</div>
         <span id="u-name"></span>
       </div>
+      <button id="roll-btn" onclick="rollToNextCycle()" disabled style="opacity:0.4;cursor:not-allowed;background:rgba(255,255,255,.15);border:none;color:#fff;padding:4px 12px;border-radius:4px;font-size:11px;font-family:var(--font);margin-right:4px;font-weight:500">Roll to next cycle</button>
       <button class="signout-btn" onclick="doSignOut()">Sign out</button>
     </div>
   </div>
@@ -501,7 +502,7 @@ async function spLoad(){
         if(v.support)support[f.Title]=v.support;
       }catch(e){}
     });
-    setSI('');
+    setSI('');updateRollBtn();
   }catch(e){setSI('err');console.error(e);}
 }
 
@@ -541,22 +542,11 @@ window.markDone=function(id){
       completedBy:me?.name||'team',completedAt:new Date().toISOString()});
     if(hist.length>1000)hist=hist.slice(0,1000);
     qSave('__history__',hist);
-    if(RECURRING.includes(t.f)){
-      // Calculate next deadline NOW before clearing anything
-      const nextDue = nextCycle(t.d, t.f);
-      const nextDueStr = nextDue ? nextDue.toISOString().split('T')[0] : null;
-      delete overrides[id];
-      // Small delay so user sees "Done" flash, then reset
-      setTimeout(()=>{
-        states[id]='Not Started';
-        // Store the next cycle date as override so it persists correctly
-        if(nextDueStr){overrides[id]=nextDueStr;}else{delete overrides[id];}
-        qSave(id,{status:'Not Started',override:nextDueStr||null,responsible:responsible[id]||null,support:support[id]||null});
-        renderCur();
-      },1200);
-    }
+    // Done stays Done - user must press "Roll to next cycle" to advance
   }else if(cur==='Completed'){states[id]='Not Started';}
+  // Save status; preserve existing override (don't overwrite with stale value)
   qSave(id,{status:states[id],override:overrides[id]||null,responsible:responsible[id]||null,support:support[id]||null});
+  updateRollBtn();
   renderCur();
 };
 window.startOvr=function(id){
@@ -573,6 +563,40 @@ window.saveOvr=function(id){
   qSave(id,{status:states[id]||null,override:overrides[id]||null,responsible:responsible[id]||null,support:support[id]||null});
   renderCur();
 };
+
+// Roll to next cycle
+window.rollToNextCycle=async function(){
+  const doneTasks=ALL.filter(t=>RECURRING.includes(t.f)&&getSt(t)==='Completed');
+  if(!doneTasks.length)return;
+  doneTasks.forEach(t=>{
+    const id=t.id;
+    // Calculate next natural deadline from base definition (ignore any override)
+    const nextDue=nextCycle(t.d,t.f);
+    const nextDueStr=nextDue?nextDue.toISOString().split('T')[0]:null;
+    // Reset status and clear override, store natural next deadline
+    states[id]='Not Started';
+    if(nextDueStr){overrides[id]=nextDueStr;}else{delete overrides[id];}
+    saveQ[id]={status:'Not Started',override:nextDueStr||null,responsible:responsible[id]||null,support:support[id]||null};
+  });
+  updateRollBtn();
+  renderCur();
+  // Batch save all at once
+  setSI('saving');
+  try{
+    await Promise.all(Object.entries(saveQ).map(([k,v])=>spSave(k,v)));
+    saveQ={};setSI('saved');setTimeout(()=>setSI(''),2000);
+  }catch(e){setSI('err');console.error(e);}
+};
+
+function updateRollBtn(){
+  const btn=document.getElementById('roll-btn');if(!btn)return;
+  const hasDone=ALL.some(t=>RECURRING.includes(t.f)&&getSt(t)==='Completed');
+  btn.disabled=!hasDone;
+  btn.style.opacity=hasDone?'1':'0.4';
+  btn.style.cursor=hasDone?'pointer':'not-allowed';
+  const count=ALL.filter(t=>RECURRING.includes(t.f)&&getSt(t)==='Completed').length;
+  btn.textContent=hasDone?`Roll to next cycle (${count})`:'Roll to next cycle';
+}
 
 // Responsible / Support
 function getAssigned(store, id){ return store[id]||''; }
@@ -614,7 +638,7 @@ function dcell(t){
 }
 
 // Tabs
-function renderCur(){if(curTab==='overview')rOv();else if(curTab==='entity')rEnt();else if(curTab==='upcoming')rUp();else rHist();}
+function renderCur(){if(curTab==='overview')rOv();else if(curTab==='entity')rEnt();else if(curTab==='upcoming')rUp();else rHist();updateRollBtn();}
 window.goTab=function(tab){
   curTab=tab;
   document.querySelectorAll('.nav-btn').forEach((b,i)=>b.classList.toggle('active',['overview','entity','upcoming','history'][i]===tab));

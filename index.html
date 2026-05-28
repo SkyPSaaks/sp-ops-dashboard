@@ -543,12 +543,17 @@ function rUp(){
   if(pf)tasks=tasks.filter(t=>t.p===pf);
   tasks.sort((a,b)=>(getEff(a)||new Date(9999,0,1))-(getEff(b)||new Date(9999,0,1)));
   const rows=tasks.length?tasks.map(t=>{
-    const s=getSt(t),nx=s==='Completed'&&RECURRING.includes(t.f),d=getEff(t),ov=!!overrides[t.id];
+    const s=getSt(t),nx=s==='Completed'&&RECURRING.includes(t.f),d=getEff(t);
     return'<tr><td style="font-size:12px;color:var(--text2)">'+(ESHORT[t.e]||t.e)+'</td>'
       +'<td class="tnm" title="'+t.t+'" style="max-width:0">'+t.t+'</td>'
+      +'<td style="font-size:11px;color:var(--text2)">'+t.sub+'</td>'
       +'<td><span class="fb">'+t.f+'</span></td>'
       +'<td class="'+dcls(d)+'" style="white-space:nowrap">'+(nx?'<span class="nxt">next: </span>':'')+'<span>'+dlbl(d)+'</span></td>'
-      +'<td><span class="badge b-'+t.p+'">'+t.p+'</span></td>'+personCell(t,'res')+'<td>'+sbtn(t)+'</td></tr>';
+      +'<td><span class="badge b-'+t.p+'">'+t.p+'</span></td>'
+      +personCell(t,'res')
+      +personCell(t,'sup')
+      +'<td>'+sbtn(t)+'</td>'
+      +'<td style="font-size:11px;color:var(--text3);line-height:1.5;white-space:normal;word-wrap:break-word">'+t.n+'</td></tr>';
   }).join(''):'<tr><td colspan="10" style="padding:2.5rem;text-align:center;color:var(--text2)">No tasks in this window.</td></tr>';
   document.getElementById('t-upcoming').innerHTML=
     '<div class="frow"><label>Window:</label>'

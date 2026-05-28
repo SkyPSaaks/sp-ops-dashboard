@@ -542,12 +542,16 @@ window.markDone=function(id){
     if(hist.length>1000)hist=hist.slice(0,1000);
     qSave('__history__',hist);
     if(RECURRING.includes(t.f)){
+      // Calculate next deadline NOW before clearing anything
+      const nextDue = nextCycle(t.d, t.f);
+      const nextDueStr = nextDue ? nextDue.toISOString().split('T')[0] : null;
       delete overrides[id];
       // Small delay so user sees "Done" flash, then reset
       setTimeout(()=>{
         states[id]='Not Started';
-        delete overrides[id]; // ensure cleared
-        qSave(id,{status:'Not Started',override:null,responsible:responsible[id]||null,support:support[id]||null});
+        // Store the next cycle date as override so it persists correctly
+        if(nextDueStr){overrides[id]=nextDueStr;}else{delete overrides[id];}
+        qSave(id,{status:'Not Started',override:nextDueStr||null,responsible:responsible[id]||null,support:support[id]||null});
         renderCur();
       },1200);
     }

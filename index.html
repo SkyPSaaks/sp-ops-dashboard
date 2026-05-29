@@ -1,4 +1,3 @@
-<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -88,6 +87,8 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .d-ok{color:var(--text2)}
 .ovr{font-size:10px;background:var(--warn-bg);color:var(--warn);border-radius:10px;padding:1px 6px;margin-left:4px;font-weight:600}
 .nxt{font-size:10px;color:var(--text3);margin-right:2px}
+.ot-done{opacity:0.45;pointer-events:none}
+.ot-done td{background:var(--surface2)!important}
 .hrow{display:flex;align-items:flex-start;gap:12px;padding:11px 14px;border-bottom:1px solid var(--border)}
 .hrow:last-child{border-bottom:none}
 .hdot{width:8px;height:8px;border-radius:50%;background:#059669;flex-shrink:0;margin-top:5px}
@@ -284,7 +285,7 @@ const ALL = [{"e":"Sky Pointer Fund I (US RIA)","c":"Regulatory","sub":"SEC / RI
 
 
 // State
-let states={},overrides={},hist=[],responsible={},support={},spIds={},selEnt=ENTITIES[0],curTab='overview';
+let states={},overrides={},hist=[],responsible={},support={},spIds={},selEnt=ENTITIES[0],curTab='overview',showDoneOneTime=false;
 // Pre-populate responsible and support from task definitions
 ALL.forEach(t=>{if(t.r)responsible[t.id]=t.r;if(t.sp)support[t.id]=t.sp;});
 let msalApp,token,me,saveQ={},saveTimer;
@@ -388,6 +389,12 @@ window.markDone=function(id){
   }else if(cur==='Completed'){states[id]='Not Started';}
   qSave(id,{status:states[id],override:null,responsible:responsible[id]||null,support:support[id]||null});
   updateRollBtn();
+  renderCur();
+};
+
+// Toggle one-time completed visibility
+window.toggleDoneOneTime=function(){
+  showDoneOneTime=!showDoneOneTime;
   renderCur();
 };
 
@@ -501,7 +508,12 @@ function rOv(){
 
 function rEnt(){
   const pf=document.getElementById('ef-p')?.value||'',cf=document.getElementById('ef-c')?.value||'',ff=document.getElementById('ef-f')?.value||'';
-  let tasks=ALL.filter(t=>t.e===selEnt&&!(t.f==='One Time'&&getSt(t)==='Completed'));
+  // One-time completed: show greyed if toggled on, else hide
+  let tasks=ALL.filter(t=>{
+    if(t.e!==selEnt) return false;
+    if(t.f==='One Time'&&getSt(t)==='Completed') return showDoneOneTime;
+    return true;
+  });
   if(pf)tasks=tasks.filter(t=>t.p===pf);
   if(cf)tasks=tasks.filter(t=>t.c===cf);
   if(ff)tasks=tasks.filter(t=>t.f===ff);
@@ -517,7 +529,7 @@ function rEnt(){
       +'<thead><tr><th style="width:22%">Task</th><th style="width:10%">Sub-category</th><th style="width:8%">Frequency</th>'
       +'<th style="width:10%">Deadline</th>'
       +'<th style="width:7%">Priority</th><th style="width:9%">Responsible</th><th style="width:9%">Support</th><th style="width:12%">Status</th><th style="width:20%">Notes</th></tr></thead><tbody>'
-      +ct.map(t=>'<tr><td style="white-space:normal;word-wrap:break-word;font-size:12px;padding:8px 12px">'+t.t+'</td>'
+      +ct.map(t=>'<tr class="'+(t.f==\'One Time\'&&getSt(t)==\'Completed\'?\'ot-done\':\'\')+'"><td style="white-space:normal;word-wrap:break-word;font-size:12px;padding:8px 12px">'+t.t+'</td>'
         +'<td style="font-size:11px;color:var(--text2)">'+t.sub+'</td>'
         +'<td><span class="fb">'+t.f+'</span></td>'+dcell(t)
         +'<td><span class="badge b-'+t.p+'">'+t.p+'</span></td>'+personCell(t,'res')+personCell(t,'sup')
@@ -532,6 +544,7 @@ function rEnt(){
     +'<label>Frequency:</label><select id="ef-f" onchange="rEnt()"><option value="">All</option><option>Monthly</option><option>Quarterly</option><option>Semestral</option><option>Annual</option><option>One Time</option><option>Event-Driven</option></select>'
     +'<label>Responsible:</label><select id="ef-r" onchange="rEnt()"><option value="">All</option>'+allAssigned(responsible).map(n=>'<option>'+n+'</option>').join('')+'</select>'
     +'<label>Support:</label><select id="ef-s" onchange="rEnt()"><option value="">All</option>'+allAssigned(support).map(n=>'<option>'+n+'</option>').join('')+'</select>'
+    +'<button onclick="toggleDoneOneTime()" style="margin-left:8px;padding:5px 12px;border-radius:var(--r);border:1px solid var(--border);background:'+(showDoneOneTime?'var(--accent)':'var(--surface)')+';color:'+(showDoneOneTime?'#fff':'var(--text2)')+';font-size:12px;cursor:pointer;font-family:var(--font)">'+(showDoneOneTime?'Hide completed setup':'Show completed setup')+'</button>'
     +'</div>'+body;
 }
 

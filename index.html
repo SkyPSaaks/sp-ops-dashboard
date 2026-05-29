@@ -529,7 +529,7 @@ function rEnt(){
       +'<thead><tr><th style="width:22%">Task</th><th style="width:10%">Sub-category</th><th style="width:8%">Frequency</th>'
       +'<th style="width:10%">Deadline</th>'
       +'<th style="width:7%">Priority</th><th style="width:9%">Responsible</th><th style="width:9%">Support</th><th style="width:12%">Status</th><th style="width:20%">Notes</th></tr></thead><tbody>'
-      +ct.map(t=>'<tr class="'+(t.f==\'One Time\'&&getSt(t)==\'Completed\'?\'ot-done\':\'\')+'"><td style="white-space:normal;word-wrap:break-word;font-size:12px;padding:8px 12px">'+t.t+'</td>'
+      +ct.map(t=>'<tr class="'+(t.f==="One Time"&&getSt(t)==='Completed'?'ot-done':'')+'"><td style="white-space:normal;word-wrap:break-word;font-size:12px;padding:8px 12px">'+t.t+'</td>'
         +'<td style="font-size:11px;color:var(--text2)">'+t.sub+'</td>'
         +'<td><span class="fb">'+t.f+'</span></td>'+dcell(t)
         +'<td><span class="badge b-'+t.p+'">'+t.p+'</span></td>'+personCell(t,'res')+personCell(t,'sup')

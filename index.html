@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -535,44 +536,56 @@ function rEnt(){
 }
 
 function rUp(){
-  const win=parseInt(document.getElementById('uw')?.value||60),pf=document.getElementById('upr')?.value||'';
+  const win=parseInt(document.getElementById('uw')?.value||window._upWin||60);
+  const pf=document.getElementById('upr')?.value||(window._upPrio===undefined?'':window._upPrio);
+  window._upWin=win; window._upPrio=pf;
+
   let tasks=ALL.filter(t=>{
     if(t.f==='Event-Driven'||(t.f==='One Time'&&getSt(t)==='Completed'))return false;
     const n=du(getEff(t));return n!==null&&n>=-7&&n<=win;
   });
   if(pf)tasks=tasks.filter(t=>t.p===pf);
   tasks.sort((a,b)=>(getEff(a)||new Date(9999,0,1))-(getEff(b)||new Date(9999,0,1)));
+
   const rows=tasks.length?tasks.map(t=>{
     const s=getSt(t),nx=s==='Completed'&&RECURRING.includes(t.f),d=getEff(t);
-    return'<tr><td style="font-size:12px;color:var(--text2)">'+(ESHORT[t.e]||t.e)+'</td>'
-      +'<td class="tnm" title="'+t.t+'" style="max-width:0">'+t.t+'</td>'
-      +'<td style="font-size:11px;color:var(--text2)">'+t.sub+'</td>'
+    return'<tr>'
+      +'<td style="font-size:12px;color:var(--text2);white-space:nowrap">'+(ESHORT[t.e]||t.e)+'</td>'
+      +'<td style="font-size:12px;white-space:normal;word-wrap:break-word;line-height:1.4;padding:8px 12px">'+t.t+'</td>'
+      +'<td style="font-size:11px;color:var(--text2);white-space:normal">'+t.sub+'</td>'
       +'<td><span class="fb">'+t.f+'</span></td>'
       +'<td class="'+dcls(d)+'" style="white-space:nowrap">'+(nx?'<span class="nxt">next: </span>':'')+'<span>'+dlbl(d)+'</span></td>'
       +'<td><span class="badge b-'+t.p+'">'+t.p+'</span></td>'
       +personCell(t,'res')
       +personCell(t,'sup')
       +'<td>'+sbtn(t)+'</td>'
-      +'<td style="font-size:11px;color:var(--text3);line-height:1.5;white-space:normal;word-wrap:break-word">'+t.n+'</td></tr>';
+      +'<td style="font-size:11px;color:var(--text3);line-height:1.5;white-space:normal;word-wrap:break-word">'+t.n+'</td>'
+      +'</tr>';
   }).join(''):'<tr><td colspan="10" style="padding:2.5rem;text-align:center;color:var(--text2)">No tasks in this window.</td></tr>';
+
+  const winOpts=[30,60,90].map(v=>'<option value="'+v+'"'+(v===win?' selected':'')+'>'+v+' days</option>').join('');
+  const prioOpts=['','Critical','High'].map(v=>'<option value="'+v+'"'+(v===pf?' selected':'')+'>'+(v||'All')+'</option>').join('');
+
   document.getElementById('t-upcoming').innerHTML=
-    '<div class="frow"><label>Window:</label>'
-    +'<select id="uw" onchange="rUp()"><option value="30">30 days</option><option value="60" selected>60 days</option><option value="90">90 days</option></select>'
-    +'<label>Priority:</label><select id="upr" onchange="rUp()"><option value="">All</option><option>Critical</option><option>High</option></select></div>'
+    '<div class="frow">'
+    +'<label>Window:</label><select id="uw" onchange="rUp()">'+winOpts+'</select>'
+    +'<label>Priority:</label><select id="upr" onchange="rUp()">'+prioOpts+'</select>'
+    +'</div>'
     +'<div class="cw"><table class="tbl"><thead><tr>'
     +'<th style="width:8%">Entity</th>'
     +'<th style="width:20%">Task</th>'
-    +'<th style="width:8%">Sub-category</th>'
-    +'<th style="width:6%">Frequency</th>'
+    +'<th style="width:9%">Sub-category</th>'
+    +'<th style="width:7%">Frequency</th>'
     +'<th style="width:8%">Deadline</th>'
     +'<th style="width:5%">Priority</th>'
-    +'<th style="width:7%">Responsible</th>'
+    +'<th style="width:8%">Responsible</th>'
     +'<th style="width:8%">Support</th>'
-    +'<th style="width:11%">Status</th>'
-    +'<th style="width:19%">Notes</th>'
+    +'<th style="width:10%">Status</th>'
+    +'<th style="width:17%">Notes</th>'
     +'</tr></thead>'
     +'<tbody>'+rows+'</tbody></table></div>';
 }
+
 
 function rHist(){
   const ef=document.getElementById('hf-e')?.value||'',cf=document.getElementById('hf-c')?.value||'';

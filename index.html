@@ -551,6 +551,7 @@ function rEnt(){
 function rUp(){
   const win=parseInt(document.getElementById('uw')?.value||window._upWin||60);
   const pf=document.getElementById('upr')?.value||(window._upPrio===undefined?'':window._upPrio);
+  const rf=document.getElementById('upres')?.value||'';
   window._upWin=win; window._upPrio=pf;
 
   let tasks=ALL.filter(t=>{
@@ -558,6 +559,7 @@ function rUp(){
     const n=du(getEff(t));return n!==null&&n>=-7&&n<=win;
   });
   if(pf)tasks=tasks.filter(t=>t.p===pf);
+  if(rf)tasks=tasks.filter(t=>responsible[t.id]===rf);
   tasks.sort((a,b)=>(getEff(a)||new Date(9999,0,1))-(getEff(b)||new Date(9999,0,1)));
 
   const rows=tasks.length?tasks.map(t=>{
@@ -578,11 +580,13 @@ function rUp(){
 
   const winOpts=[30,60,90].map(v=>'<option value="'+v+'"'+(v===win?' selected':'')+'>'+v+' days</option>').join('');
   const prioOpts=['','Critical','High'].map(v=>'<option value="'+v+'"'+(v===pf?' selected':'')+'>'+(v||'All')+'</option>').join('');
+  const resOpts='<option value="">All</option>'+allAssigned(responsible).map(n=>'<option'+(n===rf?' selected':'')+'>'+n+'</option>').join('');
 
   document.getElementById('t-upcoming').innerHTML=
     '<div class="frow">'
     +'<label>Window:</label><select id="uw" onchange="rUp()">'+winOpts+'</select>'
     +'<label>Priority:</label><select id="upr" onchange="rUp()">'+prioOpts+'</select>'
+    +'<label>Responsible:</label><select id="upres" onchange="rUp()">'+resOpts+'</select>'
     +'</div>'
     +'<div class="cw"><table class="tbl"><thead><tr>'
     +'<th style="width:8%">Entity</th>'

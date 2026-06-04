@@ -539,11 +539,11 @@ function rEnt(){
   }).join('')||'<div class="empty">No tasks match these filters.</div>';
   document.getElementById('t-entity').innerHTML='<div class="ebar">'+ebar+'</div>'
     +'<div class="frow"><label>Priority:</label>'
-    +'<select id="ef-p" onchange="rEnt()"><option value="">All</option><option>Critical</option><option>High</option><option>Medium</option><option>Low</option></select>'
-    +'<label>Category:</label><select id="ef-c" onchange="rEnt()"><option value="">All</option><option>Regulatory</option><option>Operations</option><option>Financial</option><option>Administrative</option></select>'
-    +'<label>Frequency:</label><select id="ef-f" onchange="rEnt()"><option value="">All</option><option>Monthly</option><option>Quarterly</option><option>Semestral</option><option>Annual</option><option>One Time</option><option>Event-Driven</option></select>'
-    +'<label>Responsible:</label><select id="ef-r" onchange="rEnt()"><option value="">All</option>'+allAssigned(responsible).map(n=>'<option>'+n+'</option>').join('')+'</select>'
-    +'<label>Support:</label><select id="ef-s" onchange="rEnt()"><option value="">All</option>'+allAssigned(support).map(n=>'<option>'+n+'</option>').join('')+'</select>'
+    +'<select id="ef-p" onchange="rEnt()"><option value="">All</option>'+['Critical','High','Medium','Low'].map(v=>'<option'+(v===pf?' selected':'')+'>'+v+'</option>').join('')+'</select>'
+    +'<label>Category:</label><select id="ef-c" onchange="rEnt()"><option value="">All</option>'+['Regulatory','Operations','Financial','Administrative'].map(v=>'<option'+(v===cf?' selected':'')+'>'+v+'</option>').join('')+'</select>'
+    +'<label>Frequency:</label><select id="ef-f" onchange="rEnt()"><option value="">All</option>'+['Monthly','Quarterly','Semestral','Annual','One Time','Event-Driven'].map(v=>'<option'+(v===ff?' selected':'')+'>'+v+'</option>').join('')+'</select>'
+    +'<label>Responsible:</label><select id="ef-r" onchange="rEnt()"><option value="">All</option>'+allAssigned(responsible).map(n=>'<option'+(n===rf?' selected':'')+'>'+n+'</option>').join('')+'</select>'
+    +'<label>Support:</label><select id="ef-s" onchange="rEnt()"><option value="">All</option>'+allAssigned(support).map(n=>'<option'+(n===sf?' selected':'')+'>'+n+'</option>').join('')+'</select>'
     +'<button onclick="toggleDoneOneTime()" style="margin-left:8px;padding:5px 12px;border-radius:var(--r);border:1px solid var(--border);background:'+(showDoneOneTime?'var(--accent)':'var(--surface)')+';color:'+(showDoneOneTime?'#fff':'var(--text2)')+';font-size:12px;cursor:pointer;font-family:var(--font)">'+(showDoneOneTime?'Hide completed setup':'Show completed setup')+'</button>'
     +'</div>'+body;
 }
@@ -612,8 +612,8 @@ function rHist(){
   }).join(''):'<div style="padding:2.5rem;text-align:center;color:var(--text2);font-size:14px">No completions logged yet.</div>';
   document.getElementById('t-history').innerHTML=
     '<div class="frow"><label>Entity:</label>'
-    +'<select id="hf-e" onchange="rHist()"><option value="">All entities</option>'+ENTITIES.map(e=>'<option value="'+e+'">'+ESHORT[e]+'</option>').join('')+'</select>'
-    +'<label>Category:</label><select id="hf-c" onchange="rHist()"><option value="">All</option><option>Regulatory</option><option>Operations</option><option>Financial</option><option>Administrative</option></select></div>'
+    +'<select id="hf-e" onchange="rHist()"><option value="">All entities</option>'+ENTITIES.map(e=>'<option value="'+e+'"'+(e===ef?' selected':'')+'>'+ESHORT[e]+'</option>').join('')+'</select>'
+    +'<label>Category:</label><select id="hf-c" onchange="rHist()"><option value="">All</option>'+['Regulatory','Operations','Financial','Administrative'].map(v=>'<option'+(v===cf?' selected':'')+'>'+v+'</option>').join('')+'</select></div>'
     +'<div class="cw"><div style="max-height:520px;overflow-y:auto">'+rows+'</div></div>';
 }
 

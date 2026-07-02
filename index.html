@@ -185,9 +185,61 @@ function qEnds(y=TODAY.getFullYear()){return[new Date(y,2,31),new Date(y,5,30),n
 function nearestQPlus(n){for(let q of qEnds()){const d=new Date(q);d.setDate(d.getDate()+n);if(d>=TODAY)return d;}return null;}
 function nearestQEnd(){for(let q of qEnds())if(q>=TODAY)return q;return new Date(TODAY.getFullYear()+1,2,31);}
 
+function nearestMonthEnd(){
+  let d=new Date(TODAY.getFullYear(),TODAY.getMonth()+1,0);
+  if(d<TODAY) d=new Date(TODAY.getFullYear(),TODAY.getMonth()+2,0);
+  return d;
+}
+function nearestMonthlyDay(day){
+  let d=new Date(TODAY.getFullYear(),TODAY.getMonth(),day);
+  if(d<TODAY) d=new Date(TODAY.getFullYear(),TODAY.getMonth()+1,day);
+  return d;
+}
+function nearestSemestral(cands){
+  const y=TODAY.getFullYear();
+  const dates=[];
+  cands.forEach(([m,d])=>{dates.push(new Date(y,m,d));dates.push(new Date(y+1,m,d));});
+  dates.sort((a,b)=>a-b);
+  for(const d of dates) if(d>=TODAY) return d;
+  return dates[dates.length-1];
+}
+
 function parseDue(txt){
   if(!txt)return null;
   const t=txt.toLowerCase(),y=TODAY.getFullYear();
+
+  // Quarterly "N days after/of quarter-end" (English + Spanish "dias/días
+  // naturales siguientes al cierre de [cada] trimestre"), any N. A single
+  // generic rule — the old code hardcoded each N separately and missed
+  // several (e.g. "5 days", "15 days of"), and a Spanish compound string
+  // listing all 4 quarterly dates together was being caught by an earlier,
+  // unrelated single-date check, so it never advanced past Q1's date.
+  const mQ = t.match(/(\d+)\s*(?:days?|d[ií]as?(?:\s*naturales)?)\s*(?:after|of|siguientes al cierre de(?:\s*cada)?)\s*(?:quarter-end|trimestre)/);
+  if(mQ) return nearestQPlus(parseInt(mQ[1],10));
+
+  // Quarterly: "within the month following quarter-end" (~30 days)
+  if(t.includes('dentro del mes siguiente al cierre de cada trimestre')) return nearestQPlus(30);
+
+  // Quarterly: "at the close of each quarter" (the quarter-end date itself)
+  if(t.includes('al cierre de cada trimestre')) return nearestQEnd();
+
+  // Semestral (twice yearly): pick whichever of the two known dates is
+  // nearer. Previously these always showed the same fixed date all year.
+  if(t.includes('1er semestre')) return nearestSemestral([[7,31],[1,28]]); // Aug 31 / Feb 28
+  if(t.includes('dentro del mes siguiente al cierre de cada semestre')) return nearestSemestral([[6,31],[1,28]]); // Jul 31 / Feb 28
+
+  // Monthly: true month-end. Previously shared logic with quarter-end below,
+  // so monthly tasks showed quarterly (Mar/Jun/Sep/Dec) dates instead.
+  if(t.includes('last business day of each month')||t.includes('último día hábil de cada mes')||t.includes('ultimo dia habil de cada mes')) return nearestMonthEnd();
+  // Quarterly: true quarter-end
+  if(t.includes('last business day of each quarter')) return nearestQEnd();
+
+  // Monthly: "Xth business day of the following month" — requires "month" in
+  // the text so it can no longer false-match "15 business days..." or
+  // "5 business days of the meeting" style text (old code matched any
+  // substring containing "5 business", including inside "15 business").
+  if(/(?<!\d)5(?:th)?\s*business\s*day.*month/.test(t)) return nearestMonthlyDay(7);
+
   if(t.includes('jan 31')||t.includes('enero'))return new Date(y,0,31);
   if(t.includes('mar 31')||t.includes('marzo'))return new Date(y,2,31);
   if(t.includes('apr 30')||t.includes('april 30'))return new Date(y,3,30);
@@ -199,23 +251,10 @@ function parseDue(txt){
   if(t.includes('sep 15'))return new Date(y,8,15);
   if(t.includes('dec 31')||t.includes('diciembre'))return new Date(y,11,31);
   if(t.includes('feb 28'))return new Date(y,1,28);
-  if(t.includes('20 abr'))return new Date(y,3,20);
-  if(t.includes('20 jul'))return new Date(y,6,20);
-  if(t.includes('20 oct'))return new Date(y,9,20);
-  if(t.includes('20 ene'))return new Date(y+1,0,20);
   if(t.includes('mid-feb'))return new Date(y,1,15);
   if(t.includes('mid-may'))return new Date(y,4,15);
   if(t.includes('mid-aug'))return new Date(y,7,15);
   if(t.includes('mid-nov'))return new Date(y,10,15);
-  if(t.includes('5th business')||t.includes('5 business'))return new Date(y,TODAY.getMonth()+1,7);
-  if(t.includes('15 days of quarter')||t.includes('15 days after quarter'))return nearestQPlus(15);
-  if(t.includes('45 days after quarter'))return nearestQPlus(45);
-  if(t.includes('60 days after quarter'))return nearestQPlus(60);
-  if(t.includes('65 days after quarter'))return nearestQPlus(65);
-  if(t.includes('70 days after quarter'))return nearestQPlus(70);
-  if(t.includes('80 days after quarter'))return nearestQPlus(80);
-  if(t.includes('90 days after quarter'))return nearestQPlus(90);
-  if(t.includes('last business day')||t.includes('último día hábil'))return nearestQEnd();
   if(t.includes('q2')||t.includes('april–june'))return new Date(y,4,30);
   if(t.includes('q4')||t.includes('october–november'))return new Date(y,9,31);
   return null;

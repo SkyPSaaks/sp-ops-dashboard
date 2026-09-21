@@ -315,6 +315,28 @@ function fmtCycle(d,f){
   if(f==='Semestral')return(d.getMonth()<6?'H1':'H2')+' '+d.getFullYear();
   return''+d.getFullYear();
 }
+// The reporting PERIOD a task's deadline relates to is not always the same
+// quarter/month as the deadline date itself (e.g. "by 90 days after
+// quarter-end" due dates land in the following quarter). fmtCycle() above
+// labels by the deadline's own month, which mislabels these lagged tasks.
+// periodLabel() instead finds the quarter-end/month-end the deadline is
+// counting forward FROM, so the label reflects what period is being
+// reported on, not when it happens to be due.
+function periodLabel(d,f){
+  if(!d)return'';
+  if(f==='Quarterly'){
+    const qEnds=[];
+    for(let yy=d.getFullYear()-1;yy<=d.getFullYear()+1;yy++){
+      qEnds.push(new Date(yy,2,31),new Date(yy,5,30),new Date(yy,8,30),new Date(yy,11,31));
+    }
+    qEnds.sort((a,b)=>a-b);
+    let per=null;
+    for(const q of qEnds){if(q<=d)per=q;else break;}
+    if(!per)return fmtCycle(d,f);
+    return'Q'+(Math.floor(per.getMonth()/3)+1)+' '+per.getFullYear();
+  }
+  return fmtCycle(d,f);
+}
 function du(d){if(!d)return null;return Math.round((d-TODAY)/864e5);}
 function dcls(d){const n=du(d);if(n===null)return'';if(n<0)return'd-ov';if(n<=30)return'd-sn';return'd-ok';}
 function dlbl(d){const n=du(d);if(n===null)return'–';if(n<0)return Math.abs(n)+'d overdue';if(n===0)return'today';if(n<=7)return n+'d';return fmtDs(d);}
@@ -468,7 +490,7 @@ window.markDone=function(id){
     states[id]='Completed';
     const eff=getEff(t);
     hist.unshift({id,entity:t.e,cat:t.c,task:t.t,freq:t.f,
-      cycleLabel:fmtCycle(eff||parseDue(t.d),t.f),
+      cycleLabel:periodLabel(eff||parseDue(t.d),t.f),
       completedBy:me?.name||'team',completedAt:new Date().toISOString()});
     if(hist.length>1000)hist=hist.slice(0,1000);
     qSave('__history__',hist);
@@ -656,6 +678,7 @@ function rUp(){
       +'<td style="font-size:12px;white-space:normal;word-wrap:break-word;line-height:1.4;padding:8px 12px">'+t.t+'</td>'
       +'<td style="font-size:11px;color:var(--text2);white-space:normal">'+t.sub+'</td>'
       +'<td><span class="fb">'+t.f+'</span></td>'
+      +'<td style="font-size:12px;font-weight:600;white-space:nowrap;color:var(--accent)">'+(periodLabel(d,t.f)||'–')+'</td>'
       +'<td class="'+dcls(d)+'" style="white-space:nowrap">'+(nx?'<span class="nxt">next: </span>':'')+'<span>'+dlbl(d)+'</span></td>'
       +'<td><span class="badge b-'+t.p+'">'+t.p+'</span></td>'
       +personCell(t,'res')
@@ -663,7 +686,7 @@ function rUp(){
       +'<td>'+sbtn(t)+'</td>'
       +'<td style="font-size:11px;color:var(--text3);line-height:1.5;white-space:normal;word-wrap:break-word">'+t.n+'</td>'
       +'</tr>';
-  }).join(''):'<tr><td colspan="10" style="padding:2.5rem;text-align:center;color:var(--text2)">No tasks in this window.</td></tr>';
+  }).join(''):'<tr><td colspan="11" style="padding:2.5rem;text-align:center;color:var(--text2)">No tasks in this window.</td></tr>';
 
   const winOpts=[30,60,90].map(v=>'<option value="'+v+'"'+(v===win?' selected':'')+'>'+v+' days</option>').join('');
   const prioOpts=['','Critical','High'].map(v=>'<option value="'+v+'"'+(v===pf?' selected':'')+'>'+(v||'All')+'</option>').join('');
@@ -676,16 +699,17 @@ function rUp(){
     +'<label>Responsible:</label><select id="upres" onchange="rUp()">'+resOpts+'</select>'
     +'</div>'
     +'<div class="cw"><table class="tbl"><thead><tr>'
-    +'<th style="width:8%">Entity</th>'
-    +'<th style="width:20%">Task</th>'
-    +'<th style="width:9%">Sub-category</th>'
-    +'<th style="width:7%">Frequency</th>'
+    +'<th style="width:7%">Entity</th>'
+    +'<th style="width:18%">Task</th>'
+    +'<th style="width:8%">Sub-category</th>'
+    +'<th style="width:6%">Frequency</th>'
+    +'<th style="width:7%">Period</th>'
     +'<th style="width:8%">Deadline</th>'
     +'<th style="width:5%">Priority</th>'
     +'<th style="width:8%">Responsible</th>'
     +'<th style="width:8%">Support</th>'
-    +'<th style="width:10%">Status</th>'
-    +'<th style="width:17%">Notes</th>'
+    +'<th style="width:9%">Status</th>'
+    +'<th style="width:16%">Notes</th>'
     +'</tr></thead>'
     +'<tbody>'+rows+'</tbody></table></div>';
 }

@@ -346,7 +346,19 @@ function fmtCycle(d,f){
 // periodLabel() instead finds the quarter-end/month-end the deadline is
 // counting forward FROM, so the label reflects what period is being
 // reported on, not when it happens to be due.
-function periodLabel(d,f){
+// Some Monthly/Annual tasks report on a PRIOR period rather than the one
+// their deadline falls in (e.g. "By Apr 30 following Dec 31 fiscal
+// year-end" reports on last year's FYE; "5th business day of the
+// following month" reports on last month). Others use the same wording
+// pattern ("each month", "each quarter") but are NOT lagged. We can't
+// tell these apart from the date alone — only the task's own due-date
+// text says which kind it is — so periodLabel takes that text too and
+// only shifts the period back when the wording says "following"/"after"
+// relative to month-end or fiscal-year-end. Anything not matching one of
+// these lag patterns keeps the deadline's own month/year, unchanged.
+const MONTH_LAG = /following month/i;
+const ANNUAL_LAG = /following (the )?dec(ember)?\s*31|following.*fiscal year-?end|after dec(ember)?\s*31|extended (deadline|k-?1 deadline)/i;
+function periodLabel(d,f,dText){
   if(!d)return'';
   if(f==='Quarterly'){
     const qEnds=[];
@@ -358,6 +370,13 @@ function periodLabel(d,f){
     for(const q of qEnds){if(q<=d)per=q;else break;}
     if(!per)return fmtCycle(d,f);
     return'Q'+(Math.floor(per.getMonth()/3)+1)+' '+per.getFullYear();
+  }
+  if(f==='Monthly'&&dText&&MONTH_LAG.test(dText)){
+    const per=new Date(d.getFullYear(),d.getMonth()-1,1);
+    return fmtCycle(per,f);
+  }
+  if(f==='Annual'&&dText&&ANNUAL_LAG.test(dText)){
+    return''+(d.getFullYear()-1);
   }
   return fmtCycle(d,f);
 }
@@ -620,7 +639,7 @@ window.markDone=function(id){
     states[id]='Completed';
     const eff=getEff(t);
     hist.unshift({id,entity:t.e,cat:t.c,task:t.t,freq:t.f,
-      cycleLabel:periodLabel(eff||parseDue(t.d),t.f),
+      cycleLabel:periodLabel(eff||parseDue(t.d),t.f,t.d),
       completedBy:me?.name||'team',completedAt:new Date().toISOString()});
     if(hist.length>1000)hist=hist.slice(0,1000);
     qSave('__history__',hist);
@@ -809,7 +828,7 @@ function rUp(){
       +'<td style="font-size:12px;white-space:normal;word-wrap:break-word;line-height:1.4;padding:8px 12px">'+t.t+'</td>'
       +'<td style="font-size:11px;color:var(--text2);white-space:normal">'+t.sub+'</td>'
       +'<td><span class="fb">'+t.f+'</span></td>'
-      +'<td style="font-size:12px;font-weight:600;white-space:nowrap;color:var(--accent)">'+(periodLabel(d,t.f)||'–')+'</td>'
+      +'<td style="font-size:12px;font-weight:600;white-space:nowrap;color:var(--accent)">'+(periodLabel(d,t.f,t.d)||'–')+'</td>'
       +'<td class="'+dcls(d)+'" style="white-space:nowrap">'+(nx?'<span class="nxt">next: </span>':'')+'<span>'+dlbl(d)+'</span></td>'
       +'<td><span class="badge b-'+t.p+'">'+t.p+'</span></td>'
       +personCell(t,'res')

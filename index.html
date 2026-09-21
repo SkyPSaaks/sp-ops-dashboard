@@ -106,6 +106,26 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .sg-b .sg-title{font-size:14px;font-weight:600;margin-bottom:4px}
 .sg-b .sg-desc{font-size:13px;color:var(--text2);line-height:1.6}
 .sg-b .sg-desc code{background:var(--surface2);padding:1px 5px;border-radius:3px;font-family:monospace;font-size:12px;color:var(--accent)}
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(20,20,18,.5);z-index:200;align-items:center;justify-content:center}
+.modal-bg.show{display:flex}
+.modal-card{background:var(--surface);border-radius:var(--rl);padding:1.75rem;max-width:480px;width:92%;max-height:85vh;overflow-y:auto}
+.modal-card h3{font-size:16px;font-weight:700;margin-bottom:4px;color:var(--accent)}
+.modal-sub{font-size:12px;color:var(--text2);margin-bottom:1.1rem}
+.modal-card label{font-size:12px;font-weight:600;color:var(--text2);display:block;margin-bottom:5px}
+.modal-card input[type=text]{width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:var(--r);font-size:14px;font-family:var(--font);margin-bottom:.4rem}
+.modal-warn{font-size:12px;color:#b45309;background:var(--warn-bg);border-radius:var(--r);padding:8px 10px;margin:.4rem 0 1rem;display:none}
+.modal-warn.show{display:block}
+.modal-preview{background:var(--surface2);border-radius:var(--r);padding:10px 12px;font-size:12px;color:var(--text2);margin-bottom:1.2rem;max-height:160px;overflow-y:auto}
+.modal-preview b{color:var(--text)}
+.modal-btns{display:flex;gap:8px;justify-content:flex-end}
+.mbtn{border:none;cursor:pointer;border-radius:var(--r);padding:9px 16px;font-size:13px;font-weight:600;font-family:var(--font)}
+.mbtn-cancel{background:var(--surface2);color:var(--text2)}
+.mbtn-cancel:hover{background:var(--border)}
+.mbtn-confirm{background:var(--accent);color:#fff}
+.mbtn-confirm:hover{background:var(--accent2)}
+.mbtn-confirm:disabled{opacity:.4;cursor:not-allowed}
+.dup-progress{font-size:12px;color:var(--text2);margin-top:.6rem}
+.dup-fail{font-size:12px;color:#7f1d1d;background:var(--danger-bg);border-radius:var(--r);padding:8px 10px;margin-top:.6rem}
 </style>
 </head>
 <body>
@@ -154,6 +174,10 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
     <div id="t-upcoming" style="display:none"></div>
     <div id="t-history" style="display:none"></div>
   </div>
+</div>
+
+<div id="dup-modal" class="modal-bg">
+  <div class="modal-card" id="dup-modal-body"></div>
 </div>
 
 <script>
@@ -383,6 +407,19 @@ function rebuildAllFromList(items){
     s:(fallbackById[d.id]&&fallbackById[d.id].s)||'Not Started'
   }));
   ALL.length=0; ALL.push(...rebuilt);
+  syncEntitiesFromAll();
+}
+
+// ESHORT/ENTITIES start out hardcoded (see above) so the app has something
+// to render before the first load completes. Any entity found in the live
+// SharePoint data that isn't already registered — e.g. one created via the
+// "Duplicate as new SPV" button — is added here automatically, so new
+// entities show up for every viewer on their next load without anyone
+// needing to hand-edit this file.
+function syncEntitiesFromAll(){
+  let added=false;
+  ALL.forEach(t=>{ if(t.e && !(t.e in ESHORT)){ ESHORT[t.e]=t.e; added=true; } });
+  if(added){ ENTITIES.length=0; ENTITIES.push(...Object.keys(ESHORT)); }
 }
 
 
@@ -468,6 +505,99 @@ async function spSave(key,val){
     if(r)spIds[key]=r.id;
   }
 }
+async function spSaveTaskDef(key,defObj){
+  const ok=await getGraphIds(); if(!ok)throw new Error('Could not resolve IDs');
+  const body=JSON.stringify({fields:{Title:key,TaskDef:JSON.stringify(defObj),StateValue:''}});
+  const r=await graphFetch(`https://graph.microsoft.com/v1.0/sites/${graphSiteId}/lists/${graphListId}/items`,{method:'POST',body});
+  if(r)spIds[key]=r.id;
+}
+
+// Clone every task belonging to `sourceEntity` into a brand-new entity
+// `newName`. Writes one SharePoint row per task, sequentially (safer than
+// parallel POSTs against Graph API rate limits). Returns {created, failed}
+// so the caller can report exactly what happened rather than assuming
+// all-or-nothing success.
+async function duplicateEntity(sourceEntity,newName,onProgress){
+  const template=ALL.filter(t=>t.e===sourceEntity);
+  let maxId=Math.max(0,...ALL.map(t=>parseInt(t.id.slice(2),10)||0));
+  const created=[],failed=[];
+  for(const t of template){
+    maxId++;
+    const newId='tk'+maxId;
+    const defObj={e:newName,c:t.c,sub:t.sub,t:t.t,f:t.f,d:t.d,r:t.r||'',sp:t.sp||'',p:t.p,n:t.n};
+    try{
+      await spSaveTaskDef(newId,defObj);
+      ALL.push({...defObj,id:newId,s:'Not Started'});
+      created.push(newId);
+    }catch(e){
+      console.error('Failed to create',newId,e);
+      failed.push({id:newId,task:t.t,error:e.message});
+    }
+    if(onProgress)onProgress(created.length+failed.length,template.length);
+  }
+  syncEntitiesFromAll();
+  applyDefaultAssignments();
+  return {created,failed,total:template.length};
+}
+
+// ---- Duplicate-SPV modal ----
+let dupSource=null;
+window.openDupModal=function(sourceEntity){
+  dupSource=sourceEntity;
+  const count=ALL.filter(t=>t.e===sourceEntity).length;
+  document.getElementById('dup-modal-body').innerHTML=
+    '<h3>Duplicate '+(ESHORT[sourceEntity]||sourceEntity)+' as a new SPV</h3>'
+    +'<div class="modal-sub">Copies every task from this SPV\'s template into a brand-new entity. Status, dates and assignments all start fresh — nothing is copied from the current progress.</div>'
+    +'<label>New SPV name</label>'
+    +'<input type="text" id="dup-name" placeholder="e.g. SPV Orion" oninput="dupValidate()">'
+    +'<div class="modal-warn" id="dup-warn"></div>'
+    +'<div class="modal-preview" id="dup-preview">Template: <b>'+(ESHORT[sourceEntity]||sourceEntity)+'</b> &nbsp;·&nbsp; <b>'+count+'</b> tasks will be created, all set to "Not Started" with no owner assigned yet.</div>'
+    +'<div id="dup-progress-area"></div>'
+    +'<div class="modal-btns">'
+    +'<button class="mbtn mbtn-cancel" onclick="closeDupModal()">Cancel</button>'
+    +'<button class="mbtn mbtn-confirm" id="dup-confirm-btn" disabled onclick="confirmDup()">Create '+count+' tasks</button>'
+    +'</div>';
+  document.getElementById('dup-modal').classList.add('show');
+}
+window.closeDupModal=function(){
+  document.getElementById('dup-modal').classList.remove('show');
+  dupSource=null;
+}
+window.dupValidate=function(){
+  const name=document.getElementById('dup-name').value.trim();
+  const warn=document.getElementById('dup-warn');
+  const btn=document.getElementById('dup-confirm-btn');
+  if(!name){warn.classList.remove('show');btn.disabled=true;return;}
+  if(name in ESHORT){
+    warn.textContent='An entity named "'+name+'" already exists — pick a different name.';
+    warn.classList.add('show');btn.disabled=true;return;
+  }
+  warn.classList.remove('show');btn.disabled=false;
+}
+window.confirmDup=async function(){
+  const name=document.getElementById('dup-name').value.trim();
+  if(!name||name in ESHORT)return;
+  const btn=document.getElementById('dup-confirm-btn');
+  btn.disabled=true;
+  document.getElementById('dup-name').disabled=true;
+  const progEl=document.getElementById('dup-progress-area');
+  const total=ALL.filter(t=>t.e===dupSource).length;
+  progEl.innerHTML='<div class="dup-progress" id="dup-prog-txt">Creating tasks… 0/'+total+'</div>';
+  const result=await duplicateEntity(dupSource,name,(done,tot)=>{
+    const p=document.getElementById('dup-prog-txt');
+    if(p)p.textContent='Creating tasks… '+done+'/'+tot;
+  });
+  if(result.failed.length===0){
+    progEl.innerHTML='<div class="dup-progress">✓ Created all '+result.created.length+' tasks for "'+name+'".</div>';
+    setTimeout(()=>{closeDupModal();selEnt=name;curTab='entity';goTab('entity');},900);
+  }else{
+    progEl.innerHTML='<div class="dup-progress">Created '+result.created.length+' of '+result.total+' tasks.</div>'
+      +'<div class="dup-fail"><b>'+result.failed.length+' task(s) failed to save</b> — likely a connection or permissions issue. "'+name+'" now exists but is incomplete. You can close this and try again; already-created tasks won\'t be duplicated a second time only if you re-run with the same name (they will — so it\'s safest to check the entity in SharePoint and remove the partial rows before retrying).<br><br>'
+      +result.failed.map(f=>'• '+f.task+' — '+f.error).join('<br>')+'</div>'
+      +'<div class="modal-btns" style="margin-top:.8rem"><button class="mbtn mbtn-cancel" onclick="closeDupModal();renderCur();">Close</button></div>';
+  }
+}
+
 function qSave(key,val){
   setSI('saving');saveQ[key]=val;clearTimeout(saveTimer);
   saveTimer=setTimeout(async()=>{
@@ -630,7 +760,8 @@ function rEnt(){
   const sf=document.getElementById('ef-s')?.value||'';
   if(rf)tasks=tasks.filter(t=>responsible[t.id]===rf);
   if(sf)tasks=tasks.filter(t=>support[t.id]===sf);
-  const ebar=ENTITIES.map(e=>'<button class="ebtn'+(e===selEnt?' active':'')+'" onclick="pickEnt(\''+e.replace(/'/g,"\\'")+'\')">'+(ESHORT[e]||e)+'</button>').join('');
+  const ebar=ENTITIES.map(e=>'<button class="ebtn'+(e===selEnt?' active':'')+'" onclick="pickEnt(\''+e.replace(/'/g,"\\'")+'\')">'+(ESHORT[e]||e)+'</button>').join('')
+    +(selEnt.indexOf('SPV')===0?'<button class="ebtn" style="background:var(--accent);color:#fff;border-color:transparent;margin-left:8px" onclick="openDupModal(\''+selEnt.replace(/'/g,"\\'")+'\')">+ Duplicate as new SPV</button>':'');
   const cats=[...new Set(tasks.map(t=>t.c))];
   let body=cats.map(c=>{
     const ct=tasks.filter(t=>t.c===c);

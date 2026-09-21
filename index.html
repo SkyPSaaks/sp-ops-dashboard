@@ -643,7 +643,7 @@ function rUp(){
 
   let tasks=ALL.filter(t=>{
     if(t.f==='Event-Driven'||(t.f==='One Time'&&getSt(t)==='Completed'))return false;
-    const n=du(getEff(t));return n!==null&&n>=-7&&n<=win;
+    const n=du(getEff(t));return n!==null&&n<=win;
   });
   if(pf)tasks=tasks.filter(t=>t.p===pf);
   if(rf)tasks=tasks.filter(t=>responsible[t.id]===rf);

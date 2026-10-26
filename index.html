@@ -37,7 +37,8 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .save-ind{font-size:11px;padding:2px 8px;border-radius:4px}
 .si-saving{background:rgba(255,255,255,.2);color:#fff}
 .si-saved{background:#d1fae5;color:#064e3b}
-.si-err{background:#fee2e2;color:#7f1d1d}
+.si-err{background:#fee2e2;color:#7f1d1d;border:none;cursor:pointer;font-family:var(--font)}
+.si-err:hover{background:#fecaca}
 .nav{background:var(--surface);border-bottom:1px solid var(--border);padding:0 2rem;display:flex}
 .nav-btn{padding:12px 16px;font-size:13px;cursor:pointer;border:none;background:none;color:var(--text2);border-bottom:2px solid transparent;margin-bottom:-1px;font-family:var(--font);transition:color .15s}
 .nav-btn.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
@@ -172,7 +173,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
   <div class="topbar">
     <div class="topbar-title">Sky Pointer – Operational Dashboard</div>
     <div class="topbar-right">
-      <span id="save-ind" class="save-ind"></span>
+      <span id="save-ind" class="save-ind" onclick="retrySaves()" role="status"></span>
       <div style="display:flex;align-items:center;gap:6px">
         <div class="user-avatar" id="u-avatar">–</div>
         <span id="u-name"></span>
@@ -477,8 +478,21 @@ function normalizeOverrides(){
 // SharePoint via Microsoft Graph API
 let graphSiteId='', graphListId='';
 
-async function graphFetch(url,opts={}){
+// Access tokens expire after about an hour. MSAL caches them and renews them
+// silently, so ask it for one before every call instead of reusing the token
+// from sign-in forever.
+const SCOPES=['User.Read','Sites.ReadWrite.All'];
+async function getToken(force=false){
+  const accs=msalApp?msalApp.getAllAccounts():[];
+  if(!accs.length)return token;
+  try{const r=await msalApp.acquireTokenSilent({scopes:SCOPES,account:accs[0],forceRefresh:force});token=r.accessToken;}
+  catch(e){console.warn('Silent token renewal failed; sign-in needed',e);}
+  return token;
+}
+async function graphFetch(url,opts={},retried=false){
+  await getToken();
   const r=await fetch(url,{...opts,headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json',...(opts.headers||{})}});
+  if(r.status===401&&!retried){await getToken(true);return graphFetch(url,opts,true);}
   if(!r.ok){const tx=await r.text();throw new Error('Graph '+r.status+': '+tx);}
   if(r.status===204)return null;
   return r.json();
@@ -642,15 +656,56 @@ window.confirmDup=async function(){
 
 function qSave(key,val){
   setSI('saving');saveQ[key]=val;clearTimeout(saveTimer);
-  saveTimer=setTimeout(async()=>{
-    try{await Promise.all(Object.entries(saveQ).map(([k,v])=>spSave(k,v)));saveQ={};setSI('saved');setTimeout(()=>setSI(''),2000);}
-    catch(e){setSI('err');console.error(e);}
-  },800);
+  saveTimer=setTimeout(flushSaves,800);
 }
+// Saves everything queued. Items that save are removed from the queue; items
+// that fail stay queued and are retried on the next save, on the retry button,
+// or automatically every minute, so nothing is lost while the tab stays open.
+let flushing=false,lastSaveErr='';
+async function flushSaves(){
+  if(flushing){clearTimeout(saveTimer);saveTimer=setTimeout(flushSaves,1000);return;}
+  const entries=Object.entries(saveQ);
+  if(!entries.length){setSI('');return;}
+  flushing=true;setSI('saving');
+  const res=await Promise.allSettled(entries.map(([k,v])=>spSave(k,v)));
+  flushing=false;
+  const failed=[];
+  res.forEach((r,i)=>{
+    const[k,v]=entries[i];
+    if(r.status==='fulfilled'){if(saveQ[k]===v)delete saveQ[k];}   // keep it if it changed again meanwhile
+    else failed.push(k+': '+(r.reason&&r.reason.message||r.reason));
+  });
+  if(failed.length){
+    lastSaveErr=failed.slice(0,5).join('\n');
+    console.error('Save failed for',failed.length,'item(s):\n'+failed.join('\n'));
+    setSI('err');
+  }else{lastSaveErr='';setSI('saved');setTimeout(()=>{if(!Object.keys(saveQ).length)setSI('');},2000);}
+}
+// Clicking the error badge is a user action, so a sign-in popup is allowed here
+// if the silent renewal no longer works.
+window.retrySaves=async function(){
+  const el=document.getElementById('save-ind');
+  if(!el||!el.classList.contains('si-err'))return;
+  const accs=msalApp?msalApp.getAllAccounts():[];
+  try{
+    if(accs.length)await msalApp.acquireTokenSilent({scopes:SCOPES,account:accs[0],forceRefresh:true}).then(r=>token=r.accessToken);
+    else throw new Error('no account');
+  }catch(e){
+    try{const r=await msalApp.acquireTokenPopup({scopes:SCOPES});token=r.accessToken;}
+    catch(e2){console.error(e2);}
+  }
+  await flushSaves();
+};
+setInterval(()=>{if(Object.keys(saveQ).length&&!flushing)flushSaves();},60000);
+window.addEventListener('beforeunload',e=>{
+  if(Object.keys(saveQ).length){e.preventDefault();e.returnValue='';}
+});
 function setSI(st){
   const el=document.getElementById('save-ind');if(!el)return;
   el.className='save-ind'+(st?' si-'+st:'');
-  el.textContent={saving:'Saving…',saved:'Saved ✓',err:'Save error','loading':'Loading…','':usingFallbackDefs?'Offline task list (list not migrated)':''}[st]||st;
+  const n=Object.keys(saveQ).length;
+  el.textContent={saving:'Saving…',saved:'Saved ✓',err:n+' change'+(n===1?'':'s')+' not saved · Retry','loading':'Loading…','':usingFallbackDefs?'Offline task list (list not migrated)':''}[st]||st;
+  el.title=st==='err'?('Click to retry. Changes stay queued while this tab is open.\n\n'+lastSaveErr):'';
 }
 
 // Actions
@@ -702,11 +757,7 @@ window.rollToNextCycle=async function(){
   updateRollBtn();
   renderCur();
   // Batch save all at once
-  setSI('saving');
-  try{
-    await Promise.all(Object.entries(saveQ).map(([k,v])=>spSave(k,v)));
-    saveQ={};setSI('saved');setTimeout(()=>setSI(''),2000);
-  }catch(e){setSI('err');console.error(e);}
+  await flushSaves();
 };
 
 
@@ -739,9 +790,7 @@ window.fixPeriods=async function(){
     saveQ[x.t.id]=stateOf(x.t.id);
   });
   renderCur();updateFixBtn();
-  setSI('saving');
-  try{await Promise.all(Object.entries(saveQ).map(([k,v])=>spSave(k,v)));saveQ={};setSI('saved');setTimeout(()=>setSI(''),2000);}
-  catch(e){setSI('err');console.error(e);}
+  await flushSaves();
 };
 
 function updateRollBtn(){

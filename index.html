@@ -124,6 +124,25 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .mbtn-confirm{background:var(--accent);color:#fff}
 .mbtn-confirm:hover{background:var(--accent2)}
 .mbtn-confirm:disabled{opacity:.4;cursor:not-allowed}
+/* Comments + task editing */
+.cmt{width:100%;min-height:34px;resize:vertical;font-size:12px;line-height:1.4;padding:5px 7px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-family:var(--font)}
+.cmt:focus,.edit-btn:focus-visible,.modal-card input:focus,.modal-card select:focus,.modal-card textarea:focus{outline:2px solid var(--accent2);outline-offset:1px}
+.cmt::placeholder{color:var(--text3)}
+.task-cell{display:flex;align-items:flex-start;gap:6px}
+.task-cell span{flex:1}
+.edit-btn{flex:none;border:1px solid transparent;background:none;color:var(--text3);cursor:pointer;border-radius:4px;padding:1px 5px;font-size:12px;line-height:1.4;font-family:var(--font)}
+.edit-btn:hover{border-color:var(--border);color:var(--accent);background:var(--surface)}
+.edit-btn:disabled{opacity:.35;cursor:not-allowed}
+.modal-card.wide{max-width:560px}
+.modal-card select,.modal-card textarea{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--r);font-size:13px;font-family:var(--font);background:var(--surface);color:var(--text);margin-bottom:.4rem}
+.modal-card textarea{min-height:90px;resize:vertical;line-height:1.45}
+.mfield{margin-bottom:.7rem}
+.mgrid{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+.mhint{font-size:11px;color:var(--text2);margin-top:-2px}
+.mhint.bad{color:#b45309}
+.merr{font-size:12px;color:#7f1d1d;background:var(--danger-bg);border-radius:var(--r);padding:8px 10px;margin-bottom:.8rem;display:none}
+.merr.show{display:block}
+@media(max-width:560px){.mgrid{grid-template-columns:1fr}}
 .dup-progress{font-size:12px;color:var(--text2);margin-top:.6rem}
 .dup-fail{font-size:12px;color:#7f1d1d;background:var(--danger-bg);border-radius:var(--r);padding:8px 10px;margin-top:.6rem}
 </style>
@@ -179,6 +198,10 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 
 <div id="dup-modal" class="modal-bg">
   <div class="modal-card" id="dup-modal-body"></div>
+</div>
+
+<div id="edit-modal" class="modal-bg" onclick="if(event.target===this)closeEditModal()">
+  <div class="modal-card wide" id="edit-modal-body" role="dialog" aria-modal="true" aria-labelledby="edit-title"></div>
 </div>
 
 <script>
@@ -415,7 +438,7 @@ function syncEntitiesFromAll(){
 
 
 // State
-let states={},overrides={},hist=[],responsible={},support={},spIds={},selEnt=ENTITIES[0],curTab='overview',showDoneOneTime=false;
+let states={},overrides={},hist=[],responsible={},support={},comments={},spIds={},selEnt=ENTITIES[0],curTab='overview',showDoneOneTime=false;
 // Pre-populate responsible and support from task definitions
 function applyDefaultAssignments(){
   ALL.forEach(t=>{if(t.r&&!responsible[t.id])responsible[t.id]=t.r;if(t.sp&&!support[t.id])support[t.id]=t.sp;});
@@ -424,6 +447,14 @@ applyDefaultAssignments();
 let msalApp,token,me,saveQ={},saveTimer;
 
 function getSt(t){return states[t.id]||t.s;}
+// Everything saved in a task's StateValue. Every save writes the whole object,
+// so all save paths go through here to avoid wiping fields they don't touch.
+function stateOf(id){
+  return{status:states[id]||null,override:overrides[id]||null,
+    responsible:responsible[id]||null,support:support[id]||null,
+    comment:comments[id]||null};
+}
+function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function getEff(t){
   // The stored deadline of the cycle this task is currently on wins, whatever the status.
   // (Previously a Completed task fell back to "nearest upcoming date from today", so the
@@ -474,7 +505,7 @@ async function spLoad(){
   try{
     const ok=await getGraphIds(); if(!ok)throw new Error('Could not resolve site/list IDs');
     const d=await graphFetch(`https://graph.microsoft.com/v1.0/sites/${graphSiteId}/lists/${graphListId}/items?expand=fields(select=Title,StateValue,TaskDef)&$top=5000`);
-    states={};overrides={};hist=[];spIds={};
+    states={};overrides={};hist=[];spIds={};comments={};
     const items=d.value||[];
     items.forEach(item=>{
       const f=item.fields||{};
@@ -486,6 +517,7 @@ async function spLoad(){
         if(v.override)overrides[f.Title]=v.override;
         if(v.responsible)responsible[f.Title]=v.responsible;
         if(v.support)support[f.Title]=v.support;
+        if(v.comment)comments[f.Title]=v.comment;
       }catch(e){}
     });
     rebuildAllFromList(items);
@@ -511,6 +543,15 @@ async function spSaveTaskDef(key,defObj){
   const body=JSON.stringify({fields:{Title:key,TaskDef:JSON.stringify(defObj),StateValue:''}});
   const r=await graphFetch(`https://graph.microsoft.com/v1.0/sites/${graphSiteId}/lists/${graphListId}/items`,{method:'POST',body});
   if(r)spIds[key]=r.id;
+}
+
+// Overwrite an existing task's definition in place (PATCH only TaskDef, so the
+// row's StateValue — status, dates, assignments, comment — is left untouched).
+async function spUpdateTaskDef(key,defObj){
+  const ok=await getGraphIds(); if(!ok)throw new Error('Could not resolve IDs');
+  if(!spIds[key]){await spSaveTaskDef(key,defObj);return;}
+  const body=JSON.stringify({fields:{TaskDef:JSON.stringify(defObj)}});
+  await graphFetch(`https://graph.microsoft.com/v1.0/sites/${graphSiteId}/lists/${graphListId}/items/${spIds[key]}`,{method:'PATCH',body});
 }
 
 // Clone every task belonging to `sourceEntity` into a brand-new entity
@@ -630,7 +671,7 @@ window.markDone=function(id){
     qSave('__history__',hist);
     // Done stays Done - a person must press "Roll to next cycle" to advance
   }else if(cur==='Completed'){states[id]='Not Started';}
-  qSave(id,{status:states[id],override:overrides[id]||null,responsible:responsible[id]||null,support:support[id]||null});
+  qSave(id,stateOf(id));
   updateRollBtn();
   renderCur();
 };
@@ -655,7 +696,7 @@ window.rollToNextCycle=async function(){
     // Reset status and clear override, store natural next deadline
     states[id]='Not Started';
     if(nextDueStr){overrides[id]=nextDueStr;}else{delete overrides[id];}
-    saveQ[id]={status:'Not Started',override:nextDueStr||null,responsible:responsible[id]||null,support:support[id]||null};
+    saveQ[id]=stateOf(id);
     // override here stores the pre-calculated next cycle date
   });
   updateRollBtn();
@@ -695,7 +736,7 @@ window.fixPeriods=async function(){
   if(!confirm(list.length+' task(s) are on a different cycle than their history shows.\n\n'+lines+(list.length>14?'\n…and '+(list.length-14)+' more':'')+'\n\nOnly the due date/period is corrected. No task status is changed. Apply?'))return;
   list.forEach(x=>{
     overrides[x.t.id]=x.to;
-    saveQ[x.t.id]={status:states[x.t.id]||null,override:x.to,responsible:responsible[x.t.id]||null,support:support[x.t.id]||null};
+    saveQ[x.t.id]=stateOf(x.t.id);
   });
   renderCur();updateFixBtn();
   setSI('saving');
@@ -735,11 +776,105 @@ window.savePersonVal=function(v,id,field){
   v=v.trim();
   if(field==='res'){if(v)responsible[id]=v;else delete responsible[id];}
   else{if(v)support[id]=v;else delete support[id];}
-  qSave(id,{status:states[id]||null,override:overrides[id]||null,responsible:responsible[id]||null,support:support[id]||null});
+  qSave(id,stateOf(id));
   renderCur();
 };
 
 function personCell(t, field){ return personDropdown(t.id, field); }
+
+// ---- Comments ----
+function commentCell(t){
+  return '<td style="padding:4px 8px"><textarea class="cmt" rows="1" placeholder="Add a comment" aria-label="Comment for '+esc(t.t)+'" '
+    +'onchange="saveComment(\''+t.id+'\',this.value)">'+esc(comments[t.id]||'')+'</textarea></td>';
+}
+window.saveComment=function(id,v){
+  v=v.trim();
+  if(v)comments[id]=v;else delete comments[id];
+  qSave(id,stateOf(id));   // no re-render, so focus isn't lost while tabbing through
+};
+
+// ---- Edit task definition ----
+const CATS=['Regulatory','Operations','Financial','Administrative'];
+const FREQS=['Monthly','Quarterly','Semestral','Annual','One Time','Event-Driven'];
+const PRIOS=['Critical','High','Medium','Low'];
+let editId=null;
+function optList(vals,cur){
+  const all=vals.includes(cur)||!cur?vals:[cur,...vals];
+  return all.map(v=>'<option'+(v===cur?' selected':'')+'>'+esc(v)+'</option>').join('');
+}
+function editBtn(t){
+  if(usingFallbackDefs)return'<button class="edit-btn" disabled title="Editing is available once the task list has been migrated to SharePoint">✎</button>';
+  return'<button class="edit-btn" title="Edit task" aria-label="Edit task" onclick="openEditModal(\''+t.id+'\')">✎</button>';
+}
+window.openEditModal=function(id){
+  if(usingFallbackDefs)return;
+  const t=ALL.find(x=>x.id===id);if(!t)return;
+  editId=id;
+  document.getElementById('edit-modal-body').innerHTML=
+    '<h3 id="edit-title">Edit task</h3>'
+    +'<div class="modal-sub">'+esc(ESHORT[t.e]||t.e)+'. Changes are saved to SharePoint for everyone. Status, assignments and comments stay as they are.</div>'
+    +'<div class="merr" id="ed-err"></div>'
+    +'<div class="mfield"><label for="ed-t">Task</label><input type="text" id="ed-t" value="'+esc(t.t)+'"></div>'
+    +'<div class="mgrid">'
+      +'<div class="mfield"><label for="ed-c">Category</label><select id="ed-c">'+optList(CATS,t.c)+'</select></div>'
+      +'<div class="mfield"><label for="ed-sub">Sub-category</label><input type="text" id="ed-sub" value="'+esc(t.sub)+'"></div>'
+      +'<div class="mfield"><label for="ed-f">Frequency</label><select id="ed-f" onchange="edPreview()">'+optList(FREQS,t.f)+'</select></div>'
+      +'<div class="mfield"><label for="ed-p">Priority</label><select id="ed-p">'+optList(PRIOS,t.p)+'</select></div>'
+    +'</div>'
+    +'<div class="mfield"><label for="ed-d">Deadline rule</label><input type="text" id="ed-d" value="'+esc(t.d)+'" oninput="edPreview()">'
+      +'<div class="mhint" id="ed-d-hint"></div></div>'
+    +'<div class="mfield"><label for="ed-n">Description</label><textarea id="ed-n">'+esc(t.n)+'</textarea></div>'
+    +'<div class="modal-btns"><button class="mbtn mbtn-cancel" onclick="closeEditModal()">Cancel</button>'
+    +'<button class="mbtn mbtn-confirm" id="ed-save" onclick="saveEdit()">Save changes</button></div>';
+  document.getElementById('edit-modal').classList.add('show');
+  edPreview();
+  document.getElementById('ed-t').focus();
+};
+window.closeEditModal=function(){
+  editId=null;
+  document.getElementById('edit-modal').classList.remove('show');
+};
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&editId)closeEditModal();});
+
+// Live check of the deadline text, since the dashboard reads dates out of it.
+window.edPreview=function(){
+  const t=ALL.find(x=>x.id===editId);if(!t)return;
+  const d=document.getElementById('ed-d').value,f=document.getElementById('ed-f').value;
+  const hint=document.getElementById('ed-d-hint');
+  const changed=(d.trim()!==(t.d||'').trim()||f!==t.f);
+  let msg,bad=false;
+  if(!RECURRING.includes(f)){msg='No recurring deadline for '+f+' tasks.';}
+  else{
+    const nd=openDeadline(d,f,TODAY);
+    if(nd)msg='Reads as: next deadline '+fmtD(nd)+'.';
+    else{msg='No date found in this text, so the task won\'t show a deadline. Try a form like "Mar 31", "45 days after quarter-end" or "last business day of each month".';bad=true;}
+  }
+  if(changed&&RECURRING.includes(t.f)&&overrides[t.id])msg+=' Saving will reset the current due date to this rule.';
+  hint.textContent=msg;hint.className='mhint'+(bad?' bad':'');
+};
+
+window.saveEdit=async function(){
+  const t=ALL.find(x=>x.id===editId);if(!t)return;
+  const v=i=>document.getElementById(i).value;
+  const upd={t:v('ed-t').trim(),c:v('ed-c'),sub:v('ed-sub').trim(),f:v('ed-f'),p:v('ed-p'),d:v('ed-d').trim(),n:v('ed-n').trim()};
+  const err=document.getElementById('ed-err'),btn=document.getElementById('ed-save');
+  if(!upd.t){err.textContent='Task name can\'t be empty.';err.classList.add('show');return;}
+  const timingChanged=(upd.d!==(t.d||'')||upd.f!==t.f);
+  const defObj={e:t.e,c:upd.c,sub:upd.sub,t:upd.t,f:upd.f,d:upd.d,r:t.r||'',sp:t.sp||'',p:upd.p,n:upd.n};
+  btn.disabled=true;btn.textContent='Saving…';err.classList.remove('show');
+  try{
+    await spUpdateTaskDef(t.id,defObj);
+    Object.assign(t,upd);
+    // The pinned cycle date belonged to the old rule; drop it so the new rule applies.
+    if(timingChanged&&overrides[t.id]){delete overrides[t.id];qSave(t.id,stateOf(t.id));}
+    closeEditModal();renderCur();updateFixBtn();
+    setSI('saved');setTimeout(()=>setSI(''),2000);
+  }catch(e){
+    console.error(e);
+    err.textContent='Couldn\'t save to SharePoint ('+e.message.slice(0,140)+'). Check your connection and try again.';
+    err.classList.add('show');btn.disabled=false;btn.textContent='Save changes';
+  }
+};
 
 // Render helpers
 function sbtn(t){
@@ -806,15 +941,16 @@ function rEnt(){
   let body=cats.map(c=>{
     const ct=tasks.filter(t=>t.c===c);
     return'<div class="sec"><div class="sec-title">'+c+'</div><div class="cw"><table class="tbl">'
-      +'<thead><tr><th style="width:22%">Task</th><th style="width:10%">Sub-category</th><th style="width:8%">Frequency</th>'
-      +'<th style="width:10%">Deadline</th>'
-      +'<th style="width:7%">Priority</th><th style="width:9%">Responsible</th><th style="width:9%">Support</th><th style="width:12%">Status</th><th style="width:20%">Notes</th></tr></thead><tbody>'
-      +ct.map(t=>'<tr class="'+(t.f==="One Time"&&getSt(t)==='Completed'?'ot-done':'')+'"><td style="white-space:normal;word-wrap:break-word;font-size:12px;padding:8px 12px">'+t.t+'</td>'
+      +'<thead><tr><th style="width:19%">Task</th><th style="width:8%">Sub-category</th><th style="width:7%">Frequency</th>'
+      +'<th style="width:8%">Deadline</th>'
+      +'<th style="width:6%">Priority</th><th style="width:9%">Responsible</th><th style="width:9%">Support</th><th style="width:10%">Status</th><th style="width:12%">Description</th><th style="width:12%">Comments</th></tr></thead><tbody>'
+      +ct.map(t=>'<tr class="'+(t.f==="One Time"&&getSt(t)==='Completed'?'ot-done':'')+'"><td style="white-space:normal;word-wrap:break-word;font-size:12px;padding:8px 12px"><div class="task-cell"><span>'+esc(t.t)+'</span>'+editBtn(t)+'</div></td>'
         +'<td style="font-size:11px;color:var(--text2)">'+t.sub+'</td>'
         +'<td><span class="fb">'+t.f+'</span></td>'+dcell(t)
         +'<td><span class="badge b-'+t.p+'">'+t.p+'</span></td>'+personCell(t,'res')+personCell(t,'sup')
         +'<td>'+sbtn(t)+'</td>'
-        +'<td style="font-size:11px;color:var(--text3);line-height:1.5;white-space:normal;word-wrap:break-word">'+t.n+'</td></tr>').join('')
+        +'<td style="font-size:11px;color:var(--text3);line-height:1.5;white-space:normal;word-wrap:break-word">'+esc(t.n)+'</td>'
+        +commentCell(t)+'</tr>').join('')
       +'</tbody></table></div></div>';
   }).join('')||'<div class="empty">No tasks match these filters.</div>';
   document.getElementById('t-entity').innerHTML='<div class="ebar">'+ebar+'</div>'

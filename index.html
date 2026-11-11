@@ -1031,7 +1031,7 @@ function rUp(){
     const s=getSt(t),nx=s==='Completed'&&RECURRING.includes(t.f),d=getEff(t);
     return'<tr>'
       +'<td style="font-size:12px;color:var(--text2);white-space:nowrap">'+(ESHORT[t.e]||t.e)+'</td>'
-      +'<td style="font-size:12px;white-space:normal;word-wrap:break-word;line-height:1.4;padding:8px 12px">'+t.t+'</td>'
+      +'<td style="font-size:12px;white-space:normal;word-wrap:break-word;line-height:1.4;padding:8px 12px">'+esc(t.t)+'</td>'
       +'<td style="font-size:11px;color:var(--text2);white-space:normal">'+t.sub+'</td>'
       +'<td><span class="fb">'+t.f+'</span></td>'
       +'<td style="font-size:12px;font-weight:600;white-space:nowrap;color:var(--accent)">'+(periodLabel(d,t.f,t.d)||'–')+'</td>'
@@ -1040,9 +1040,10 @@ function rUp(){
       +personCell(t,'res')
       +personCell(t,'sup')
       +'<td>'+sbtn(t)+'</td>'
-      +'<td style="font-size:11px;color:var(--text3);line-height:1.5;white-space:normal;word-wrap:break-word">'+t.n+'</td>'
+      +'<td style="font-size:11px;color:var(--text3);line-height:1.5;white-space:normal;word-wrap:break-word">'+esc(t.n)+'</td>'
+      +commentCell(t)
       +'</tr>';
-  }).join(''):'<tr><td colspan="11" style="padding:2.5rem;text-align:center;color:var(--text2)">No tasks in this window.</td></tr>';
+  }).join(''):'<tr><td colspan="12" style="padding:2.5rem;text-align:center;color:var(--text2)">No tasks in this window.</td></tr>';
 
   const winOpts=[30,60,90].map(v=>'<option value="'+v+'"'+(v===win?' selected':'')+'>'+v+' days</option>').join('');
   const prioOpts=['','Critical','High'].map(v=>'<option value="'+v+'"'+(v===pf?' selected':'')+'>'+(v||'All')+'</option>').join('');
@@ -1056,16 +1057,17 @@ function rUp(){
     +'</div>'
     +'<div class="cw"><table class="tbl"><thead><tr>'
     +'<th style="width:7%">Entity</th>'
-    +'<th style="width:18%">Task</th>'
-    +'<th style="width:8%">Sub-category</th>'
+    +'<th style="width:16%">Task</th>'
+    +'<th style="width:7%">Sub-category</th>'
     +'<th style="width:6%">Frequency</th>'
-    +'<th style="width:7%">Period</th>'
-    +'<th style="width:8%">Deadline</th>'
+    +'<th style="width:6%">Period</th>'
+    +'<th style="width:7%">Deadline</th>'
     +'<th style="width:5%">Priority</th>'
     +'<th style="width:8%">Responsible</th>'
     +'<th style="width:8%">Support</th>'
     +'<th style="width:9%">Status</th>'
-    +'<th style="width:16%">Notes</th>'
+    +'<th style="width:11%">Description</th>'
+    +'<th style="width:10%">Comments</th>'
     +'</tr></thead>'
     +'<tbody>'+rows+'</tbody></table></div>';
 }

@@ -258,7 +258,7 @@ function ruleOf(txt){
   if(t.includes('dentro del mes siguiente al cierre de cada semestre'))return{k:'semi',dates:[[1,28],[6,31]]};
   if(t.includes('last business day of each month')||t.includes('último día hábil de cada mes')||t.includes('ultimo dia habil de cada mes'))return{k:'monthend'};
   if(t.includes('last business day of each quarter'))return{k:'qendbd'};
-  if(/(?<!\d)5(?:th)?\s*business\s*day.*month/.test(t))return{k:'monthbd',n:5};
+  {const b=t.match(/(?<!\d)(\d{1,2})(?:st|nd|rd|th)?\s*business\s*day.*month/);if(b&&+b[1]>=1&&+b[1]<=23)return{k:'monthbd',n:+b[1]};}
   const F=(mo,d)=>({k:'fixed',m:mo,d});
   if(t.includes('jan 31')||t.includes('enero'))return F(0,31);
   if(t.includes('mar 31')||t.includes('marzo'))return F(2,31);
@@ -520,7 +520,7 @@ async function spLoad(){
   try{
     const ok=await getGraphIds(); if(!ok)throw new Error('Could not resolve site/list IDs');
     const d=await graphFetch(`https://graph.microsoft.com/v1.0/sites/${graphSiteId}/lists/${graphListId}/items?expand=fields(select=Title,StateValue,TaskDef)&$top=5000`);
-    states={};overrides={};hist=[];spIds={};comments={};
+    states={};overrides={};hist=[];spIds={};comments={};responsible={};support={};   // start clean so built-in defaults never mask live data
     const items=d.value||[];
     items.forEach(item=>{
       const f=item.fields||{};

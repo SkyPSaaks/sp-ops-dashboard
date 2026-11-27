@@ -1024,9 +1024,11 @@ function rUp(){
   const winRaw=String(document.getElementById('uw')?.value||window._upWin||'60');
   const win=/^\d+$/.test(winRaw)?parseInt(winRaw):winRaw;
   // Read the live dropdown when it exists (so choosing "All" really clears the filter); otherwise reuse the last choice.
-  const prEl=document.getElementById('upr'),peEl=document.getElementById('upres');
+  const prEl=document.getElementById('upr'),peEl=document.getElementById('upres'),enEl=document.getElementById('upent');
   const pf=prEl?prEl.value:(window._upPrio||'');
   const rf=peEl?peEl.value:(window._upPerson||'');
+  const ef=enEl?enEl.value:(window._upEnt||'');
+  window._upEnt=ef;
   window._upWin=winRaw; window._upPrio=pf; window._upPerson=rf;
   const undated=t=>t.f!=='Event-Driven'&&getEff(t)===null;
 
@@ -1037,6 +1039,7 @@ function rUp(){
     if(t.f==='Event-Driven')return false;
     const n=du(getEff(t));return n!==null&&n<=win;
   });
+  if(ef)tasks=tasks.filter(t=>t.e===ef);
   if(pf)tasks=tasks.filter(t=>t.p===pf);
   // Person filter matches whoever is responsible OR support on the task
   if(rf)tasks=tasks.filter(t=>responsible[t.id]===rf||support[t.id]===rf);
@@ -1072,6 +1075,7 @@ function rUp(){
   document.getElementById('t-upcoming').innerHTML=
     '<div class="frow">'
     +'<label>Window:</label><select id="uw" onchange="rUp()">'+winOpts+'</select>'
+    +'<label for="upent">Entity:</label><select id="upent" onchange="rUp()"><option value="">All</option>'+ENTITIES.map(e=>'<option value="'+esc(e)+'"'+(e===ef?' selected':'')+'>'+esc(ESHORT[e]||e)+'</option>').join('')+'</select>'
     +'<label>Priority:</label><select id="upr" onchange="rUp()">'+prioOpts+'</select>'
     +'<label for="upres">Person:</label><select id="upres" onchange="rUp()" title="Shows tasks where this person is responsible or support">'+resOpts+'</select>'
     +(typeof win==='number'?'':'<span style="font-size:12px;color:var(--text2)">'+tasks.length+' task'+(tasks.length===1?'':'s')+(win==='event'?' triggered by events. Check these when something happens.':' with no readable due date. Set a date via ✎ where you can.')+'</span>')

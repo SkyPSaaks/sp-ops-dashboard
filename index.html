@@ -250,6 +250,8 @@ function qEndOf(i){const y=Math.floor(i/4),q=i%4;return new Date(y,q*3+3,0);}   
 function ruleOf(txt){
   if(!txt)return null;
   const t=txt.toLowerCase();
+  // A fixed day of a later month, e.g. "Day 20 of the 4th month after quarter-end" (Q3 → Jan 20). Quarters differ in length, so a day count can't express this.
+  {const q=t.match(/day\s*(\d{1,2})\s*of\s*the\s*(\d{1,2})(?:st|nd|rd|th)?\s*month\s*after\s*quarter-end/);if(q)return{k:'qmday',d:+q[1],m:+q[2]};}
   let m=t.match(/(\d+)\s*(?:days?|d[ií]as?(?:\s*naturales)?)\s*(?:after|of|siguientes al cierre de(?:\s*cada)?)\s*(?:quarter-end|trimestre)/);
   if(m)return{k:'qplus',n:+m[1]};
   if(t.includes('dentro del mes siguiente al cierre de cada trimestre'))return{k:'qplus',n:30};
@@ -282,11 +284,12 @@ function ruleOf(txt){
   if(g){const mo=['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'].indexOf(g[1]);const dd=+g[2];if(dd>=1&&dd<=31)return F(mo,dd);}
   return null;
 }
-const isQRule=r=>r&&(r.k==='qplus'||r.k==='qend'||r.k==='qendbd');
+const isQRule=r=>r&&(r.k==='qplus'||r.k==='qend'||r.k==='qendbd'||r.k==='qmday');
 // Deadline of cycle index i. Indexes: quarter rules year*4+q, month rules year*12+month, semi year*2+h, fixed = year.
 function dlAt(r,i){
   switch(r.k){
     case'qplus':{const d=qEndOf(i);d.setDate(d.getDate()+r.n);return d;}
+    case'qmday':{const e=qEndOf(i);return new Date(e.getFullYear(),e.getMonth()+r.m,r.d);}
     case'qend':return qEndOf(i);
     case'qendbd':{const e=qEndOf(i);return lastBD(e.getFullYear(),e.getMonth());}
     case'monthbd':return nthBD(Math.floor(i/12),i%12,r.n);
@@ -302,7 +305,7 @@ function dlAt(r,i){
 function openIdx(r,today){
   const y=today.getFullYear(),mo=today.getMonth();
   if(r.k==='fixed')return y;
-  if(r.k==='qplus'){let i=y*4+Math.floor(mo/3);while(qEndOf(i)>today)i--;return i;}
+  if(r.k==='qplus'||r.k==='qmday'){let i=y*4+Math.floor(mo/3);while(qEndOf(i)>today)i--;return i;}
   if(r.k==='monthbd')return y*12+mo;
   let i=r.k==='monthend'?y*12+mo-1:r.k==='semi'?y*2-2:y*4+Math.floor(mo/3)-1;
   while(dlAt(r,i)<today)i++;
@@ -338,6 +341,7 @@ function periodLabel(d,f,txt){
   if(!d)return'';
   const r=ruleOf(txt);
   if(r){
+    if(r.k==='qmday'){const i=idxNearest(r,d,4);if(i!=null)return'Q'+(i%4+1)+' '+Math.floor(i/4);}
     if(r.k==='qplus'){let i=d.getFullYear()*4+Math.floor(d.getMonth()/3);while(qEndOf(i)>=d)i--;const e=qEndOf(i);return'Q'+(i%4+1)+' '+Math.floor(i/4);}
     if(r.k==='qend'||r.k==='qendbd')return'Q'+(Math.floor(d.getMonth()/3)+1)+' '+d.getFullYear();
     if(r.k==='monthbd')return fmtCycle(new Date(d.getFullYear(),d.getMonth()-1,1),'Monthly');

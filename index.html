@@ -1015,18 +1015,29 @@ function rEnt(){
 }
 
 function rUp(){
-  const win=parseInt(document.getElementById('uw')?.value||window._upWin||60);
-  const pf=document.getElementById('upr')?.value||(window._upPrio===undefined?'':window._upPrio);
-  const rf=document.getElementById('upres')?.value||'';
-  window._upWin=win; window._upPrio=pf;
+  // Window: a number of days, 'event' (event-driven tasks) or 'nodate' (open tasks whose deadline isn't a readable date).
+  // These last two never show in a day window, so they get their own views instead of slipping through.
+  const winRaw=String(document.getElementById('uw')?.value||window._upWin||'60');
+  const win=/^\d+$/.test(winRaw)?parseInt(winRaw):winRaw;
+  // Read the live dropdown when it exists (so choosing "All" really clears the filter); otherwise reuse the last choice.
+  const prEl=document.getElementById('upr'),peEl=document.getElementById('upres');
+  const pf=prEl?prEl.value:(window._upPrio||'');
+  const rf=peEl?peEl.value:(window._upPerson||'');
+  window._upWin=winRaw; window._upPrio=pf; window._upPerson=rf;
+  const undated=t=>t.f!=='Event-Driven'&&getEff(t)===null;
 
   let tasks=ALL.filter(t=>{
-    if(t.f==='Event-Driven'||(t.f==='One Time'&&getSt(t)==='Completed'))return false;
+    if(t.f==='One Time'&&getSt(t)==='Completed')return false;
+    if(win==='event')return t.f==='Event-Driven';
+    if(win==='nodate')return undated(t);
+    if(t.f==='Event-Driven')return false;
     const n=du(getEff(t));return n!==null&&n<=win;
   });
   if(pf)tasks=tasks.filter(t=>t.p===pf);
-  if(rf)tasks=tasks.filter(t=>responsible[t.id]===rf);
-  tasks.sort((a,b)=>(getEff(a)||new Date(9999,0,1))-(getEff(b)||new Date(9999,0,1)));
+  // Person filter matches whoever is responsible OR support on the task
+  if(rf)tasks=tasks.filter(t=>responsible[t.id]===rf||support[t.id]===rf);
+  if(typeof win==='number')tasks.sort((a,b)=>(getEff(a)||new Date(9999,0,1))-(getEff(b)||new Date(9999,0,1)));
+  else{const po={Critical:0,High:1,Medium:2,Low:3};tasks.sort((a,b)=>ENTITIES.indexOf(a.e)-ENTITIES.indexOf(b.e)||(po[a.p]??9)-(po[b.p]??9));}
 
   const rows=tasks.length?tasks.map(t=>{
     const s=getSt(t),nx=s==='Completed'&&RECURRING.includes(t.f),d=getEff(t);
@@ -1036,7 +1047,8 @@ function rUp(){
       +'<td style="font-size:11px;color:var(--text2);white-space:normal">'+t.sub+'</td>'
       +'<td><span class="fb">'+t.f+'</span></td>'
       +'<td style="font-size:12px;font-weight:600;white-space:nowrap;color:var(--accent)">'+(periodLabel(d,t.f,t.d)||'–')+'</td>'
-      +'<td class="'+dcls(d)+'" style="white-space:nowrap">'+(nx?'<span class="nxt">next: </span>':'')+'<span>'+dlbl(d)+'</span></td>'
+      +(d?'<td class="'+dcls(d)+'" style="white-space:nowrap">'+(nx?'<span class="nxt">next: </span>':'')+'<span>'+dlbl(d)+'</span></td>'
+         :'<td style="font-size:11px;color:var(--text2);line-height:1.4;white-space:normal;min-width:110px">'+esc(t.d||'–')+'</td>')
       +'<td><span class="badge b-'+t.p+'">'+t.p+'</span></td>'
       +personCell(t,'res')
       +personCell(t,'sup')
@@ -1044,17 +1056,21 @@ function rUp(){
       +'<td style="font-size:11px;color:var(--text3);line-height:1.5;white-space:normal;word-wrap:break-word">'+esc(t.n)+'</td>'
       +commentCell(t)
       +'</tr>';
-  }).join(''):'<tr><td colspan="12" style="padding:2.5rem;text-align:center;color:var(--text2)">No tasks in this window.</td></tr>';
+  }).join(''):'<tr><td colspan="12" style="padding:2.5rem;text-align:center;color:var(--text2)">'+(win==='event'?'No event-driven tasks match these filters.':win==='nodate'?'No undated tasks match these filters.':'No tasks in this window.')+'</td></tr>';
 
-  const winOpts=[30,60,90].map(v=>'<option value="'+v+'"'+(v===win?' selected':'')+'>'+v+' days</option>').join('');
+  const winOpts=[30,60,90].map(v=>'<option value="'+v+'"'+(v===win?' selected':'')+'>'+v+' days</option>').join('')
+    +'<option value="event"'+(win==='event'?' selected':'')+'>Event-driven</option>'
+    +'<option value="nodate"'+(win==='nodate'?' selected':'')+'>No fixed date</option>';
   const prioOpts=['','Critical','High'].map(v=>'<option value="'+v+'"'+(v===pf?' selected':'')+'>'+(v||'All')+'</option>').join('');
-  const resOpts='<option value="">All</option>'+allAssigned(responsible).map(n=>'<option'+(n===rf?' selected':'')+'>'+n+'</option>').join('');
+  const people=[...new Set([...allAssigned(responsible),...allAssigned(support)])].sort((a,b)=>a.localeCompare(b));
+  const resOpts='<option value="">All</option>'+people.map(n=>'<option value="'+esc(n)+'"'+(n===rf?' selected':'')+'>'+esc(n)+'</option>').join('');
 
   document.getElementById('t-upcoming').innerHTML=
     '<div class="frow">'
     +'<label>Window:</label><select id="uw" onchange="rUp()">'+winOpts+'</select>'
     +'<label>Priority:</label><select id="upr" onchange="rUp()">'+prioOpts+'</select>'
-    +'<label>Responsible:</label><select id="upres" onchange="rUp()">'+resOpts+'</select>'
+    +'<label for="upres">Person:</label><select id="upres" onchange="rUp()" title="Shows tasks where this person is responsible or support">'+resOpts+'</select>'
+    +(typeof win==='number'?'':'<span style="font-size:12px;color:var(--text2)">'+tasks.length+' task'+(tasks.length===1?'':'s')+(win==='event'?' triggered by events. Check these when something happens.':' with no readable due date. Set a date via ✎ where you can.')+'</span>')
     +'</div>'
     +'<div class="cw"><table class="tbl"><thead><tr>'
     +'<th style="width:7%">Entity</th>'
